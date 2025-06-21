@@ -24,7 +24,7 @@ chmod +x "$APPIMAGE_FILE"
 # /opt/ にコピー（オプション）
 read -p "🤔 アプリケーションメニューに追加しますか？ (y/N): " INSTALL_MENU
 
-if [[ $INSTALL_MENU =~ ^[Yy]$ ]]; then
+if [ "$INSTALL_MENU" = "y" ] || [ "$INSTALL_MENU" = "Y" ]; then
     echo "📦 システムにインストール中..."
     
     # /opt/に移動
