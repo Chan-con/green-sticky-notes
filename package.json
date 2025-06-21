@@ -64,7 +64,7 @@
     "publish": {
       "provider": "github",
       "owner": "Chan-con",
-      "repo": "green-sticky-note"
+      "repo": "green-sticky-notes"
     }
   }
 }
