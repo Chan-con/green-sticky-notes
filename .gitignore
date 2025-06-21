@@ -61,6 +61,7 @@ sticky-notes-data/
 tmp/
 temp/
 .tmp/
+squashfs-root/
 
 # Package-lock files (choose one based on your preference)
 # package-lock.json
