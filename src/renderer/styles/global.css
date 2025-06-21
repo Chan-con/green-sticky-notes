@@ -1,0 +1,238 @@
+:root {
+  --green-primary: #90EE90;
+  --green-light: #B8F5B8;
+  --green-dark: #7CCD7C;
+  --text-dark: #2D4A2D;
+  --text-light: #5A7A5A;
+  --border-color: #C0DCC0;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: transparent;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.sticky-note {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  transition: all 0.2s ease;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sticky-note.stay-mode {
+  cursor: pointer;
+}
+
+.sticky-note.active-mode {
+  box-shadow: var(--shadow-hover);
+}
+
+.note-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.3);
+  border-bottom: 1px solid var(--border-color);
+  cursor: move;
+  -webkit-app-region: drag;
+}
+
+.note-header.hidden {
+  display: none;
+}
+
+.header-menu {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.menu-button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.menu-button:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.menu-button.active {
+  background: var(--green-dark);
+  color: white;
+}
+
+.note-content {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 12px;
+  font-family: inherit;
+  background: transparent;
+  overflow-y: auto;
+}
+
+.note-content.stay-mode {
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+}
+
+.note-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.note-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.note-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.note-content::-webkit-scrollbar-thumb:hover {
+  background: var(--green-dark);
+}
+
+.color-picker-popup {
+  position: fixed;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 50px);
+  overflow-y: auto;
+  min-width: 180px;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
+  gap: 4px;
+  max-width: 100%;
+}
+
+.color-option {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.color-option:hover,
+.color-option.selected {
+  border-color: var(--text-dark);
+}
+
+.font-size-popup {
+  position: fixed;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  max-height: calc(100vh - 50px);
+  max-width: calc(100vw - 20px);
+  overflow-y: auto;
+  min-width: 70px;
+}
+
+.font-size-option {
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+  font-size: 12px;
+  text-align: center;
+}
+
+.font-size-option:hover,
+.font-size-option.selected {
+  background: var(--green-light);
+}
+
+.font-size-popup::-webkit-scrollbar {
+  width: 6px;
+}
+
+.font-size-popup::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.font-size-popup::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.font-size-popup::-webkit-scrollbar-thumb:hover {
+  background: var(--green-dark);
+}
+
+.anchor-popup {
+  position: absolute;
+  top: 40px;
+  right: 8px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+}
+
+.anchor-option {
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.anchor-option:hover,
+.anchor-option.selected {
+  background: var(--green-light);
+}
