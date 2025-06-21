@@ -76,6 +76,13 @@
    ./Green\ Sticky-*.AppImage
    ```
 
+**アンインストール**:
+```bash
+# uninstall-linux.sh をダウンロードして実行
+chmod +x uninstall-linux.sh
+./uninstall-linux.sh
+```
+
 #### Windows
 1. **ダウンロード**: `Green Sticky Setup x.x.x.exe`
 2. **インストール**: ダウンロードしたexeファイルを実行
