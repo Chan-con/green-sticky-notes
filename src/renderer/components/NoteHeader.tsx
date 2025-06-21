@@ -11,14 +11,33 @@ interface NoteHeaderProps {
 }
 
 const colorOptions = [
-  '#90EE90', '#FFE4B5', '#FFB6C1', '#E6E6FA',
-  '#FFEFD5', '#F0FFF0', '#FFF8DC', '#E0FFFF',
-  '#FFFACD', '#F5F5DC', '#FFEBCD', '#FAFAD2',
-  // 追加のパステルカラー16色
-  '#FFD1DC', '#E1F5FE', '#F3E5F5', '#FFF3E0',
-  '#E8F5E8', '#FFF9C4', '#FFECB3', '#FCE4EC',
-  '#F1F8E9', '#E3F2FD', '#F9FBE7', '#FFCDD2',
-  '#C8E6C9', '#DCEDC8', '#F8BBD9', '#B39DDB'
+  // ピンク系パステル
+  '#FFE1E6', '#FFCCD5', '#FFB3C1', '#FF9BAE', '#FF7F9B',
+  
+  // コーラル・オレンジ系パステル
+  '#FFE4CC', '#FFCF99', '#FFB366', '#FF9F59', '#FF8A4D',
+  
+  // イエロー系パステル
+  '#FFF5CC', '#FFEB99', '#FFE066', '#FFD633', '#FFCC00',
+  
+  // ライム・イエローグリーン系パステル
+  '#F0FFCC', '#E6FF99', '#DCFF66', '#D1FF33', '#C7FF00',
+  
+  // グリーン系パステル（デフォルト含む）
+  '#E6FFCC', '#CCFF99', '#B3FF66', '#99FF33', '#7FFF00',
+  '#CCFFE6', '#99FFCC', '#66FFB3', '#33FF99', '#00FF7F',
+  
+  // ミント・ティール系パステル
+  '#CCFFFF', '#99FFFF', '#66FFFF', '#33FFFF', '#00FFFF',
+  '#CCF2FF', '#99E6FF', '#66D9FF', '#33CCFF', '#00BFFF',
+  
+  // ブルー系パステル
+  '#E6F2FF', '#CCE6FF', '#B3D9FF', '#99CCFF', '#7FBFFF',
+  '#E6E6FF', '#CCCCFF', '#B3B3FF', '#9999FF', '#7F7FFF',
+  
+  // パープル系パステル
+  '#F0E6FF', '#E6CCFF', '#DCB3FF', '#D199FF', '#C77FFF',
+  '#FFE6F5', '#FFCCEB', '#FFB3E0', '#FF99D6', '#FF7FCC'
 ];
 
 const fontSizes = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 48];

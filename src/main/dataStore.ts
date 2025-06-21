@@ -62,7 +62,7 @@ export class DataStore {
       inactiveY: note.y || 100,
       inactiveWidth: minWidth,
       inactiveHeight: minHeight,
-      backgroundColor: note.backgroundColor || '#90EE90',
+      backgroundColor: note.backgroundColor || '#CCFFE6',
       fontSize: note.fontSize || 14,
       isPinned: note.isPinned || false,
       isLocked: note.isLocked || false,
@@ -169,7 +169,7 @@ export class DataStore {
       if (!fs.existsSync(this.settingsFile)) {
         const defaultSettings: AppSettings = {
           defaultFontSize: 14,
-          defaultBackgroundColor: '#7FDD4C'  // より鮮やかなグリーン
+          defaultBackgroundColor: '#CCFFE6'  // パステルグリーン
         };
         await this.saveSettings(defaultSettings);
         return defaultSettings;
@@ -180,7 +180,7 @@ export class DataStore {
       console.error('Error loading settings:', error);
       return {
         defaultFontSize: 14,
-        defaultBackgroundColor: '#90EE90'
+        defaultBackgroundColor: '#CCFFE6'
       };
     }
   }
