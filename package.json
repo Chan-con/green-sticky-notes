@@ -1,6 +1,6 @@
 {
   "name": "green-sticky-notes",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A green sticky notes application with advanced features",
   "main": "dist/main.js",
   "scripts": {
