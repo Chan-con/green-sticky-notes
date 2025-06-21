@@ -46,6 +46,18 @@
     "files": [
       "dist/**/*",
       "node_modules/**/*"
-    ]
+    ],
+    "win": {
+      "icon": "src/assets/icons/win/icon.ico",
+      "target": "nsis"
+    },
+    "mac": {
+      "icon": "src/assets/icons/mac/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "icon": "src/assets/icons/linux/icon-512.png",
+      "category": "Office"
+    }
   }
 }
