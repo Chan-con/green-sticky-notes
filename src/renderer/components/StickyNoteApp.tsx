@@ -35,6 +35,12 @@ export const StickyNoteApp: React.FC = () => {
     });
   }, []);
 
+  useEffect(() => {
+    if (note) {
+      document.body.style.backgroundColor = note.backgroundColor;
+    }
+  }, [note?.backgroundColor]);
+
   const updateNoteContent = (content: string) => {
     if (!note) return;
 
