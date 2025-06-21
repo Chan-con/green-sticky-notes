@@ -11,7 +11,9 @@
     "build:main": "webpack --config webpack.main.config.js --mode production",
     "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
     "start": "electron dist/main.js --no-sandbox",
-    "package": "electron-builder"
+    "package": "electron-builder",
+    "package:all": "npm run build && electron-builder --publish=never",
+    "release": "npm run build && electron-builder --publish=always"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -58,6 +60,11 @@
     "linux": {
       "icon": "src/assets/icons/linux/icon-512.png",
       "category": "Office"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Chan-con",
+      "repo": "green-sticky-note"
     }
   }
 }
