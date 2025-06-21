@@ -48,9 +48,51 @@
 5. **編集終了**: 付箋外をクリックまたは他の場所にフォーカス移動
 6. **削除**: 付箋の内容を空にすると自動削除
 
-## セットアップ
+## 📥 ダウンロード・インストール
+
+### 📱 エンドユーザー向け
+
+[**Releases**](https://github.com/Chan-con/green-sticky-notes/releases)ページから最新版をダウンロード
+
+#### Linux (AppImage)
+
+**簡単インストール（推奨）**:
+1. **ダウンロード**: `Green Sticky-x.x.x.AppImage` と `install-linux.sh`
+2. **インストール実行**:
+   ```bash
+   chmod +x install-linux.sh
+   ./install-linux.sh
+   ```
+   → アプリケーションメニューに自動追加！
+
+**手動実行**:
+1. **ダウンロード**: `Green Sticky-x.x.x.AppImage`
+2. **実行権限を付与**:
+   ```bash
+   chmod +x Green\ Sticky-*.AppImage
+   ```
+3. **実行**:
+   ```bash
+   ./Green\ Sticky-*.AppImage
+   ```
+
+#### Windows
+1. **ダウンロード**: `Green Sticky Setup x.x.x.exe`
+2. **インストール**: ダウンロードしたexeファイルを実行
+3. **起動**: スタートメニューから「Green Sticky」を検索
+
+#### macOS
+1. **ダウンロード**: `Green Sticky-x.x.x.dmg`
+2. **インストール**: DMGファイルを開いてアプリケーションフォルダにドラッグ
+3. **起動**: Launchpadまたはアプリケーションフォルダから実行
+
+### 👨‍💻 開発者向けセットアップ
 
 ```bash
+# リポジトリクローン
+git clone https://github.com/Chan-con/green-sticky-notes.git
+cd green-sticky-notes
+
 # 依存関係のインストール
 npm install
 
@@ -64,7 +106,7 @@ npm run build
 npm start
 
 # パッケージ化
-npm run package
+npm run package:all
 ```
 
 ## 技術仕様
