@@ -394,55 +394,88 @@ class StickyNotesApp {
   }
 
   private createTray() {
+    console.log('Starting tray creation...');
+    console.log('Platform:', process.platform);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+    console.log('__dirname:', __dirname);
+    console.log('process.resourcesPath:', process.resourcesPath);
+    
     try {
-      // トレイアイコンを作成
-      let trayIconPath;
-      if (process.platform === 'win32') {
-        // Windowsの場合は16x16の小さなアイコンを使用
-        trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/win/icon-16.png');
-        // 開発環境の場合
-        if (process.env.NODE_ENV === 'development') {
-          trayIconPath = path.join(__dirname, '../../src/assets/icons/win/icon-16.png');
-        }
-      } else if (process.platform === 'darwin') {
-        trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/mac/icon.icns');
-        if (process.env.NODE_ENV === 'development') {
-          trayIconPath = path.join(__dirname, '../../src/assets/icons/mac/icon.icns');
-        }
-      } else {
-        trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/linux/icon-16.png');
-        if (process.env.NODE_ENV === 'development') {
-          trayIconPath = path.join(__dirname, '../../src/assets/icons/linux/icon-16.png');
-        }
-      }
-
-      console.log('Tray icon path:', trayIconPath);
+      // 複数のアイコンパスを試す
+      const possiblePaths = [];
       
-      // アイコンファイルの存在確認
-      const fs = require('fs');
-      if (!fs.existsSync(trayIconPath)) {
-        console.error('Tray icon file not found:', trayIconPath);
-        return;
+      if (process.platform === 'win32') {
+        // 本番環境のパス候補
+        possiblePaths.push(
+          path.join(process.resourcesPath, 'app', 'src/assets/icons/win/icon-16.png'),
+          path.join(process.resourcesPath, 'app.asar', 'src/assets/icons/win/icon-16.png'),
+          path.join(process.resourcesPath, 'src/assets/icons/win/icon-16.png')
+        );
+        
+        // 開発環境のパス候補
+        if (process.env.NODE_ENV === 'development') {
+          possiblePaths.unshift(
+            path.join(__dirname, '../../src/assets/icons/win/icon-16.png'),
+            path.join(__dirname, '../assets/icons/win/icon-16.png'),
+            path.join(process.cwd(), 'src/assets/icons/win/icon-16.png')
+          );
+        }
       }
 
-      this.tray = new Tray(trayIconPath);
+      console.log('Trying icon paths:', possiblePaths);
+      
+      const fs = require('fs');
+      let trayIconPath = null;
+      
+      // 存在するパスを見つける
+      for (const iconPath of possiblePaths) {
+        console.log('Checking path:', iconPath);
+        if (fs.existsSync(iconPath)) {
+          trayIconPath = iconPath;
+          console.log('Found icon at:', iconPath);
+          break;
+        }
+      }
+
+      if (!trayIconPath) {
+        console.error('No tray icon found in any of the paths:', possiblePaths);
+        // フォールバック: nativeImageで空のアイコンを作成
+        const { nativeImage } = require('electron');
+        const emptyIcon = nativeImage.createEmpty();
+        this.tray = new Tray(emptyIcon);
+        console.log('Created tray with empty icon');
+      } else {
+        this.tray = new Tray(trayIconPath);
+        console.log('Created tray with icon:', trayIconPath);
+      }
+
       this.tray.setToolTip('Green Sticky Notes');
       
       // トレイアイコンがクリックされた時の処理
       this.tray.on('click', () => {
+        console.log('Tray clicked');
         this.showAllWindows();
       });
       
       // 右クリック時のコンテキストメニュー
       this.tray.on('right-click', () => {
+        console.log('Tray right-clicked');
         this.tray?.popUpContextMenu();
       });
       
       this.updateTrayMenu();
-      console.log('Tray created successfully');
+      console.log('Tray setup completed');
+      
+      // トレイが正常に作成されたか確認
+      if (this.tray && !this.tray.isDestroyed()) {
+        console.log('Tray is active and visible');
+      } else {
+        console.error('Tray creation failed or tray was destroyed');
+      }
+      
     } catch (error) {
       console.error('Failed to create tray:', error);
-      // トレイが作成できない場合でもアプリは継続動作
+      console.error('Error stack:', error.stack);
     }
   }
 
