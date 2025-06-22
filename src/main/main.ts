@@ -394,20 +394,35 @@ class StickyNotesApp {
   }
 
   private createTray() {
-    // トレイアイコンを作成
-    let trayIconPath;
-    if (process.platform === 'win32') {
-      trayIconPath = path.join(__dirname, '../assets/icons/win/icon.ico');
-    } else if (process.platform === 'darwin') {
-      trayIconPath = path.join(__dirname, '../assets/icons/mac/icon.icns');
-    } else {
-      trayIconPath = path.join(__dirname, '../assets/icons/linux/icon-16.png');
-    }
+    try {
+      // トレイアイコンを作成
+      let trayIconPath;
+      if (process.platform === 'win32') {
+        trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/win/icon.ico');
+        // 開発環境の場合
+        if (process.env.NODE_ENV === 'development') {
+          trayIconPath = path.join(__dirname, '../../src/assets/icons/win/icon.ico');
+        }
+      } else if (process.platform === 'darwin') {
+        trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/mac/icon.icns');
+        if (process.env.NODE_ENV === 'development') {
+          trayIconPath = path.join(__dirname, '../../src/assets/icons/mac/icon.icns');
+        }
+      } else {
+        trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/linux/icon-16.png');
+        if (process.env.NODE_ENV === 'development') {
+          trayIconPath = path.join(__dirname, '../../src/assets/icons/linux/icon-16.png');
+        }
+      }
 
-    this.tray = new Tray(trayIconPath);
-    this.tray.setToolTip('Green Sticky Notes');
-    
-    this.updateTrayMenu();
+      this.tray = new Tray(trayIconPath);
+      this.tray.setToolTip('Green Sticky Notes');
+      
+      this.updateTrayMenu();
+    } catch (error) {
+      console.error('Failed to create tray:', error);
+      // トレイが作成できない場合でもアプリは継続動作
+    }
   }
 
   private async updateTrayMenu() {
