@@ -405,18 +405,19 @@ class StickyNotesApp {
       const possiblePaths = [];
       
       if (process.platform === 'win32') {
-        // 本番環境のパス候補
-        possiblePaths.push(
-          path.join(process.resourcesPath, 'app', 'src/assets/icons/win/icon-16.png'),
-          path.join(process.resourcesPath, 'app.asar', 'src/assets/icons/win/icon-16.png'),
-          path.join(process.resourcesPath, 'src/assets/icons/win/icon-16.png')
-        );
-        
         // 開発環境のパス候補
-        possiblePaths.unshift(
+        possiblePaths.push(
           path.join(process.cwd(), 'src/assets/icons/win/icon-16.png'),
           path.join(__dirname, '../../src/assets/icons/win/icon-16.png'),
           path.join(__dirname, '../assets/icons/win/icon-16.png')
+        );
+        
+        // 本番環境のパス候補（app.asarに含まれる場合）
+        possiblePaths.push(
+          path.join(process.resourcesPath, 'app.asar', 'src/assets/icons/win/icon-16.png'),
+          path.join(process.resourcesPath, 'app', 'src/assets/icons/win/icon-16.png'),
+          path.join(process.resourcesPath, 'src/assets/icons/win/icon-16.png'),
+          path.join(__dirname, '../src/assets/icons/win/icon-16.png')
         );
       }
 
