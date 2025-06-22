@@ -143,7 +143,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
             title="ピン留"
             onMouseDown={(e) => handleButtonClick(e, onTogglePin)}
           >
-            {note.isPinned ? '⭕' : '📌'}
+            {note.isPinned ? '📍' : '📌'}
           </button>
         </div>
       </div>
@@ -203,7 +203,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
             title="ピン留"
             onMouseDown={(e) => handleButtonClick(e, onTogglePin)}
           >
-            {note.isPinned ? '⭕' : '📌'}
+            {note.isPinned ? '📍' : '📌'}
           </button>
           
           <button
