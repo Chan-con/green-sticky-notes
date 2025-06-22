@@ -413,13 +413,11 @@ class StickyNotesApp {
         );
         
         // 開発環境のパス候補
-        if (process.env.NODE_ENV === 'development') {
-          possiblePaths.unshift(
-            path.join(__dirname, '../../src/assets/icons/win/icon-16.png'),
-            path.join(__dirname, '../assets/icons/win/icon-16.png'),
-            path.join(process.cwd(), 'src/assets/icons/win/icon-16.png')
-          );
-        }
+        possiblePaths.unshift(
+          path.join(process.cwd(), 'src/assets/icons/win/icon-16.png'),
+          path.join(__dirname, '../../src/assets/icons/win/icon-16.png'),
+          path.join(__dirname, '../assets/icons/win/icon-16.png')
+        );
       }
 
       console.log('Trying icon paths:', possiblePaths);
@@ -475,7 +473,9 @@ class StickyNotesApp {
       
     } catch (error) {
       console.error('Failed to create tray:', error);
-      console.error('Error stack:', error.stack);
+      if (error instanceof Error) {
+        console.error('Error stack:', error.stack);
+      }
     }
   }
 
