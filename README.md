@@ -63,48 +63,18 @@
 
 ## 📥 ダウンロード・インストール
 
-### 📱 エンドユーザー向け
+### 📱 Windows
 
 [**Releases**](https://github.com/Chan-con/green-sticky-notes/releases)ページから最新版をダウンロード
 
-#### Linux (AppImage)
-
-**簡単インストール（推奨）**:
-1. **ダウンロード**: `Green Sticky-x.x.x.AppImage` と `install-linux.sh`
-2. **インストール実行**:
-   ```bash
-   chmod +x install-linux.sh
-   ./install-linux.sh
-   ```
-   → アプリケーションメニューに自動追加！
-
-**手動実行**:
-1. **ダウンロード**: `Green Sticky-x.x.x.AppImage`
-2. **実行権限を付与**:
-   ```bash
-   chmod +x Green\ Sticky-*.AppImage
-   ```
-3. **実行**:
-   ```bash
-   ./Green\ Sticky-*.AppImage
-   ```
-
-**アンインストール**:
-```bash
-# uninstall-linux.sh をダウンロードして実行
-chmod +x uninstall-linux.sh
-./uninstall-linux.sh
-```
-
-#### Windows
 1. **ダウンロード**: `Green Sticky Setup x.x.x.exe`
 2. **インストール**: ダウンロードしたexeファイルを実行
 3. **起動**: スタートメニューから「Green Sticky」を検索
+4. **タスクトレイ**: アプリは自動的にタスクトレイに常駐します
 
-#### macOS
-1. **ダウンロード**: `Green Sticky-x.x.x.dmg`
-2. **インストール**: DMGファイルを開いてアプリケーションフォルダにドラッグ
-3. **起動**: Launchpadまたはアプリケーションフォルダから実行
+**アンインストール**:
+- Windowsの「プログラムと機能」から「Green Sticky」を選択して削除
+- アプリデータも完全に削除されます
 
 ### 👨‍💻 開発者向けセットアップ
 
