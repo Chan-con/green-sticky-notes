@@ -15,6 +15,22 @@ class StickyNotesApp {
   }
 
   private setupEventHandlers() {
+    // シングルインスタンス確保
+    const gotTheLock = app.requestSingleInstanceLock();
+    
+    if (!gotTheLock) {
+      // 既に起動中の場合は終了
+      console.log('Another instance is already running. Exiting...');
+      app.quit();
+      return;
+    }
+    
+    // 2つ目のインスタンスが起動しようとした場合の処理
+    app.on('second-instance', () => {
+      console.log('Second instance detected, showing existing windows');
+      this.showAllWindows();
+    });
+
     app.whenReady().then(() => {
       this.createTray();
       this.createInitialNotes();
