@@ -59,8 +59,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": true,
-      "script": "build/nsis-uninstall.nsh"
+      "deleteAppDataOnUninstall": true
     },
     "mac": {
       "icon": "src/assets/icons/mac/icon.icns",
