@@ -44,7 +44,7 @@
   },
   "build": {
     "appId": "com.greensticky.app",
-    "productName": "Green Sticky",
+    "productName": "Green Sticky Notes",
     "directories": {
       "output": "build"
     },

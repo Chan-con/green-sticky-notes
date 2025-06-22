@@ -67,13 +67,13 @@
 
 [**Releases**](https://github.com/Chan-con/green-sticky-notes/releases)ページから最新版をダウンロード
 
-1. **ダウンロード**: `Green Sticky Setup x.x.x.exe`
+1. **ダウンロード**: `Green Sticky Notes Setup x.x.x.exe`
 2. **インストール**: ダウンロードしたexeファイルを実行
-3. **起動**: スタートメニューから「Green Sticky」を検索
+3. **起動**: スタートメニューから「Green Sticky Notes」を検索
 4. **タスクトレイ**: アプリは自動的にタスクトレイに常駐します
 
 **アンインストール**:
-- Windowsの「プログラムと機能」から「Green Sticky」を選択して削除
+- Windowsの「プログラムと機能」から「Green Sticky Notes」を選択して削除
 - アプリデータも完全に削除されます
 
 ### 👨‍💻 開発者向けセットアップ
