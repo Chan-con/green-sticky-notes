@@ -398,10 +398,11 @@ class StickyNotesApp {
       // トレイアイコンを作成
       let trayIconPath;
       if (process.platform === 'win32') {
-        trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/win/icon.ico');
+        // Windowsの場合は16x16の小さなアイコンを使用
+        trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/win/icon-16.png');
         // 開発環境の場合
         if (process.env.NODE_ENV === 'development') {
-          trayIconPath = path.join(__dirname, '../../src/assets/icons/win/icon.ico');
+          trayIconPath = path.join(__dirname, '../../src/assets/icons/win/icon-16.png');
         }
       } else if (process.platform === 'darwin') {
         trayIconPath = path.join(process.resourcesPath, 'app', 'src/assets/icons/mac/icon.icns');
@@ -415,10 +416,30 @@ class StickyNotesApp {
         }
       }
 
+      console.log('Tray icon path:', trayIconPath);
+      
+      // アイコンファイルの存在確認
+      const fs = require('fs');
+      if (!fs.existsSync(trayIconPath)) {
+        console.error('Tray icon file not found:', trayIconPath);
+        return;
+      }
+
       this.tray = new Tray(trayIconPath);
       this.tray.setToolTip('Green Sticky Notes');
       
+      // トレイアイコンがクリックされた時の処理
+      this.tray.on('click', () => {
+        this.showAllWindows();
+      });
+      
+      // 右クリック時のコンテキストメニュー
+      this.tray.on('right-click', () => {
+        this.tray?.popUpContextMenu();
+      });
+      
       this.updateTrayMenu();
+      console.log('Tray created successfully');
     } catch (error) {
       console.error('Failed to create tray:', error);
       // トレイが作成できない場合でもアプリは継続動作
