@@ -139,11 +139,11 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           </button>
           
           <button
-            className={`menu-button ${note.isPinned ? 'active' : ''}`}
+            className="menu-button"
             title="ピン留"
             onMouseDown={(e) => handleButtonClick(e, onTogglePin)}
           >
-            📌
+            {note.isPinned ? '⭕' : '📌'}
           </button>
         </div>
       </div>
@@ -199,15 +199,15 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           </button>
           
           <button
-            className={`menu-button ${note.isPinned ? 'active' : ''}`}
+            className="menu-button"
             title="ピン留"
             onMouseDown={(e) => handleButtonClick(e, onTogglePin)}
           >
-            📌
+            {note.isPinned ? '⭕' : '📌'}
           </button>
           
           <button
-            className={`menu-button ${note.isLocked ? 'active' : ''}`}
+            className="menu-button"
             title={note.isLocked ? "アクティブロック解除" : "アクティブロック"}
             onMouseDown={(e) => handleButtonClick(e, onToggleLock)}
           >

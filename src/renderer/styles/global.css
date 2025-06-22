@@ -88,10 +88,6 @@ html, body {
   background: rgba(255, 255, 255, 0.5);
 }
 
-.menu-button.active {
-  background: var(--green-dark);
-  color: white;
-}
 
 .note-content {
   flex: 1;
