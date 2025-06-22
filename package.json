@@ -56,6 +56,12 @@
       "icon": "src/assets/icons/win/icon.ico",
       "target": "nsis"
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": true,
+      "include": "build/nsis-uninstall.nsh"
+    },
     "mac": {
       "icon": "src/assets/icons/mac/icon.icns",
       "category": "public.app-category.productivity"

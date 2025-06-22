@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage } from 'electron';
 import * as path from 'path';
 import { StickyNote, DisplayInfo, AppSettings } from '../types';
 import { DataStore } from './dataStore';
@@ -6,6 +6,8 @@ import { DataStore } from './dataStore';
 class StickyNotesApp {
   private windows: Map<string, BrowserWindow> = new Map();
   private dataStore: DataStore;
+  private tray: Tray | null = null;
+  private isQuitting = false;
 
   constructor() {
     this.dataStore = new DataStore();
@@ -14,6 +16,7 @@ class StickyNotesApp {
 
   private setupEventHandlers() {
     app.whenReady().then(() => {
+      this.createTray();
       this.createInitialNotes();
       this.setupIpcHandlers();
       
@@ -30,8 +33,16 @@ class StickyNotesApp {
     });
 
     app.on('window-all-closed', () => {
-      if (process.platform !== 'darwin') {
+      // タスクトレイがある場合はアプリを終了しない
+      if (process.platform !== 'darwin' && this.isQuitting) {
         app.quit();
+      }
+    });
+
+    app.on('before-quit', (event) => {
+      if (!this.isQuitting) {
+        event.preventDefault();
+        this.hideAllWindows();
       }
     });
   }
@@ -379,6 +390,87 @@ class StickyNotesApp {
         bounds: display.bounds,
         isPrimary: display === screen.getPrimaryDisplay()
       }));
+    });
+  }
+
+  private createTray() {
+    // トレイアイコンを作成
+    let trayIconPath;
+    if (process.platform === 'win32') {
+      trayIconPath = path.join(__dirname, '../assets/icons/win/icon.ico');
+    } else if (process.platform === 'darwin') {
+      trayIconPath = path.join(__dirname, '../assets/icons/mac/icon.icns');
+    } else {
+      trayIconPath = path.join(__dirname, '../assets/icons/linux/icon-16.png');
+    }
+
+    this.tray = new Tray(trayIconPath);
+    this.tray.setToolTip('Green Sticky Notes');
+    
+    this.updateTrayMenu();
+  }
+
+  private async updateTrayMenu() {
+    if (!this.tray) return;
+
+    const isAutoStartEnabled = await this.getAutoStartStatus();
+    
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'すべてのノートを表示',
+        click: () => this.showAllWindows()
+      },
+      {
+        label: 'すべてのノートを隠す',
+        click: () => this.hideAllWindows()
+      },
+      { type: 'separator' },
+      {
+        label: 'PC起動時に自動開始',
+        type: 'checkbox',
+        checked: isAutoStartEnabled,
+        click: async () => {
+          await this.toggleAutoStart();
+          this.updateTrayMenu(); // メニューを更新
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'アプリを終了',
+        click: () => this.quitApp()
+      }
+    ]);
+
+    this.tray.setContextMenu(contextMenu);
+  }
+
+  private showAllWindows() {
+    this.windows.forEach(win => {
+      win.show();
+      win.focus();
+    });
+  }
+
+  private hideAllWindows() {
+    this.windows.forEach(win => {
+      win.hide();
+    });
+  }
+
+  private quitApp() {
+    this.isQuitting = true;
+    app.quit();
+  }
+
+  private async getAutoStartStatus(): Promise<boolean> {
+    return app.getLoginItemSettings().openAtLogin;
+  }
+
+  private async toggleAutoStart() {
+    const isEnabled = app.getLoginItemSettings().openAtLogin;
+    app.setLoginItemSettings({
+      openAtLogin: !isEnabled,
+      openAsHidden: true
     });
   }
 }
