@@ -407,6 +407,48 @@ class StickyNotesApp {
         isPrimary: display === screen.getPrimaryDisplay()
       }));
     });
+
+    ipcMain.handle('show-context-menu', (event) => {
+      const contextMenu = Menu.buildFromTemplate([
+        {
+          label: '元に戻す',
+          accelerator: 'Ctrl+Z',
+          role: 'undo'
+        },
+        {
+          label: 'やり直し',
+          accelerator: 'Ctrl+Y',
+          role: 'redo'
+        },
+        { type: 'separator' },
+        {
+          label: '切り取り',
+          accelerator: 'Ctrl+X',
+          role: 'cut'
+        },
+        {
+          label: 'コピー',
+          accelerator: 'Ctrl+C',
+          role: 'copy'
+        },
+        {
+          label: '貼り付け',
+          accelerator: 'Ctrl+V',
+          role: 'paste'
+        },
+        { type: 'separator' },
+        {
+          label: 'すべて選択',
+          accelerator: 'Ctrl+A',
+          role: 'selectAll'
+        }
+      ]);
+      
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        contextMenu.popup({ window: win });
+      }
+    });
   }
 
   private createTray() {

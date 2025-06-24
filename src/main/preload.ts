@@ -16,3 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('set-note-pin', noteId, isPinned),
   getDisplays: () => ipcRenderer.invoke('get-displays'),
 });
+
+contextBridge.exposeInMainWorld('electron', {
+  showContextMenu: () => ipcRenderer.invoke('show-context-menu'),
+});

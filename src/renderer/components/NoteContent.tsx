@@ -14,6 +14,12 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
       onContentChange(e.target.value);
     };
 
+    const handleContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+      e.preventDefault();
+      // ElectronのIPCを通じてコンテキストメニューを表示
+      window.electron.showContextMenu();
+    };
+
     const truncateText = (text: string, maxLength: number = 50): string => {
       if (text.length <= maxLength) return text;
       return text.substring(0, maxLength) + '...';
@@ -27,6 +33,7 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
           value={note.content}
           onChange={handleChange}
           onBlur={onBlur}
+          onContextMenu={handleContextMenu}
           placeholder="付箋の内容を入力..."
           style={{ fontSize: `${note.fontSize}px` }}
         />
