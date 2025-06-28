@@ -150,22 +150,29 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
 
   // ポップアップ外クリックで閉じる
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: Event) => {
       if (showColorPicker || showFontSizePicker) {
         const target = event.target as Element;
-        // ポップアップ内やボタン内のクリックでない場合は閉じる
-        if (!target.closest('.color-picker-popup') && 
-            !target.closest('.font-size-popup') &&
-            !target.closest('.menu-button')) {
+        
+        // より厳密にポップアップ内部の要素をチェック
+        const isInsideColorPicker = target.closest('.color-picker-popup');
+        const isInsideFontSizePicker = target.closest('.font-size-popup');
+        const isMenuButton = target.closest('.menu-button');
+        
+        // ポップアップ内部のクリックでない場合のみ閉じる
+        if (!isInsideColorPicker && !isInsideFontSizePicker && !isMenuButton) {
           closeAllPopups();
         }
       }
     };
 
     if (showColorPicker || showFontSizePicker) {
-      document.addEventListener('mousedown', handleClickOutside);
+      // clickイベントを使用してより確実な外部クリック検出
+      document.addEventListener('click', handleClickOutside, true);
+      document.addEventListener('contextmenu', handleClickOutside, true);
       return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('click', handleClickOutside, true);
+        document.removeEventListener('contextmenu', handleClickOutside, true);
       };
     }
   }, [showColorPicker, showFontSizePicker]);
@@ -347,6 +354,8 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           className="color-picker-popup" 
           style={{ top: `${popupPosition.top}px`, left: `${popupPosition.left}px` }}
           onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="color-grid">
             {colorOptions.map((color) => (
@@ -405,15 +414,21 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           className="font-size-popup" 
           style={{ top: `${popupPosition.top}px`, left: `${popupPosition.left}px` }}
           onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           {fontSizes.map((size) => (
             <div
               key={size}
               className={`font-size-option ${note.fontSize === size ? 'selected' : ''}`}
-              onMouseDown={(e) => {
+              onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 handleFontSizeChange(size);
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
               }}
             >
               {size}px
