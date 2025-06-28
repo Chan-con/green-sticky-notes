@@ -2,16 +2,19 @@ import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage } from 'el
 import * as path from 'path';
 import { StickyNote, DisplayInfo, AppSettings } from '../types';
 import { DataStore } from './dataStore';
+import { WindowStateManager } from './windowStateManager';
 
 class StickyNotesApp {
   private windows: Map<string, BrowserWindow> = new Map();
   private dataStore: DataStore;
+  private windowStateManager: WindowStateManager;
   private tray: Tray | null = null;
   private isQuitting = false;
   private isSystemMinimized = false;
 
   constructor() {
     this.dataStore = new DataStore();
+    this.windowStateManager = new WindowStateManager();
     this.setupEventHandlers();
     this.setupSystemMinimizeDetection();
   }
@@ -80,6 +83,7 @@ class StickyNotesApp {
 
 
   private async createNoteWindow(note: StickyNote): Promise<BrowserWindow> {
+    // ウィンドウ作成時は既存の位置データを信頼し、最小限の調整のみ行う
     const bounds = await this.calculateNoteBounds(note);
     
     const win = new BrowserWindow({
@@ -112,52 +116,146 @@ class StickyNotesApp {
       win.webContents.send('note-data', note);
     });
 
+    // 位置更新用のデバウンス
+    let moveTimeout: NodeJS.Timeout | null = null;
+    
     win.on('moved', async () => {
       const [x, y] = win.getPosition();
-      const currentNote = await this.dataStore.getNote(note.id);
-      if (currentNote) {
-        this.dataStore.updateNotePosition(note.id, x, y, currentNote.isActive);
+      
+      // 頻繁な更新をデバウンス
+      if (moveTimeout) {
+        clearTimeout(moveTimeout);
       }
+      
+      moveTimeout = setTimeout(async () => {
+        const currentNote = await this.dataStore.getNote(note.id);
+        if (!currentNote) return;
+        
+        // 移動先のディスプレイを検出
+        const newDisplay = this.findDisplayContainingPoint(x, y);
+        const updates: Partial<StickyNote> = {};
+        
+        // ディスプレイが変更された場合
+        if (newDisplay.id.toString() !== currentNote.displayId) {
+          console.log(`=== Move Event Display Change ===`);
+          console.log(`Note ${note.id} moved to display ${newDisplay.id} from ${currentNote.displayId}`);
+          console.log(`Position: (${x}, ${y}), State: ${currentNote.isActive ? 'active' : 'inactive'}`);
+          updates.displayId = newDisplay.id.toString();
+        }
+        
+        // 状態に応じて適切な位置フィールドを更新
+        if (currentNote.isActive) {
+          updates.activeX = x;
+          updates.activeY = y;
+          console.log(`Updated active position for ${note.id}: (${x}, ${y}) on display ${newDisplay.id}`);
+        } else {
+          updates.inactiveX = x;
+          updates.inactiveY = y;
+          console.log(`Updated inactive position for ${note.id}: (${x}, ${y}) on display ${newDisplay.id}`);
+        }
+        
+        // 一度に更新
+        await this.dataStore.updateNote(note.id, updates);
+      }, 100); // 100msのデバウンス
     });
 
+    // サイズ変更用のデバウンス
+    let resizeTimeout: NodeJS.Timeout | null = null;
+    
     win.on('resized', async () => {
       const [width, height] = win.getSize();
-      const currentNote = await this.dataStore.getNote(note.id);
-      if (currentNote) {
-        this.dataStore.updateNoteSize(note.id, width, height, currentNote.isActive);
+      
+      // 頻繁なサイズ変更をデバウンス
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
       }
+      
+      resizeTimeout = setTimeout(async () => {
+        const currentNote = await this.dataStore.getNote(note.id);
+        if (currentNote && currentNote.isActive) {
+          // アクティブ時のみサイズを記録
+          await this.dataStore.updateNoteSize(note.id, width, height, true);
+          console.log(`Updated active size for ${note.id}: ${width}x${height}`);
+        }
+      }, 200); // 200msのデバウンス
     });
 
     win.on('closed', () => {
       this.windows.delete(note.id);
+      this.windowStateManager.unregisterWindow(note.id);
     });
 
     this.windows.set(note.id, win);
+    this.windowStateManager.registerWindow(note.id, note.isActive);
     return win;
   }
 
-  private async calculateNoteBounds(note: StickyNote) {
+  /**
+   * 指定された位置がどのディスプレイにあるかを検出
+   */
+  private findDisplayContainingPoint(x: number, y: number) {
     const displays = screen.getAllDisplays();
-    const currentDisplay = displays.find(d => d.id.toString() === note.displayId) || screen.getPrimaryDisplay();
     
+    console.log(`Finding display for point (${x}, ${y}) among ${displays.length} displays`);
+    
+    for (const display of displays) {
+      const bounds = display.bounds;
+      console.log(`Checking display ${display.id}: bounds ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`);
+      if (x >= bounds.x && x < bounds.x + bounds.width &&
+          y >= bounds.y && y < bounds.y + bounds.height) {
+        console.log(`Point (${x}, ${y}) found in display ${display.id}`);
+        return display;
+      }
+    }
+    
+    // どのディスプレイにも見つからない場合はプライマリディスプレイを返す
+    console.log(`Point (${x}, ${y}) not found in any display, using primary`);
+    return screen.getPrimaryDisplay();
+  }
+
+  /**
+   * 記録されたディスプレイが存在しない場合のフォールバック処理
+   */
+  private findValidDisplayForNote(note: StickyNote, isActive: boolean): { display: any, shouldMigrate: boolean } {
+    const displays = screen.getAllDisplays();
+    const targetDisplayId = note.displayId;
+    
+    // 記録されたディスプレイを検索
+    const savedDisplay = displays.find(d => d.id.toString() === targetDisplayId);
+    
+    if (savedDisplay) {
+      return { display: savedDisplay, shouldMigrate: false };
+    }
+    
+    // ディスプレイがない場合はプライマリディスプレイに移動
+    console.log(`Display ${targetDisplayId} not found for note ${note.id}. Migrating to primary display.`);
+    return { display: screen.getPrimaryDisplay(), shouldMigrate: true };
+  }
+
+  /**
+   * ユーザーが設定した位置を正確に復元する
+   */
+  private async calculateNoteBounds(note: StickyNote, currentWindowX?: number, currentWindowY?: number) {
     // アクティブ/非アクティブ状態に応じて位置とサイズを取得
     let x, y, width, height;
     
     if (note.isActive) {
       // アクティブ状態の場合
       if (note.activeX !== 0 && note.activeY !== 0) {
-        // すでにアクティブ位置が設定されている場合
+        // すでにアクティブ位置が設定されている場合はそのまま使用
         x = note.activeX;
         y = note.activeY;
+        console.log(`Using saved active position for note ${note.id}: (${x}, ${y})`);
       } else {
-        // 初回アクティブ化の場合、非アクティブ位置を基準にする
-        console.log(`First-time activation for note ${note.id}, using inactive position as base`);
-        x = note.inactiveX || 100;
-        y = note.inactiveY || 100;
+        // 初回アクティブ化の場合は現在位置をそのまま維持（境界チェックも最小限に）
+        console.log(`First-time activation for note ${note.id}, staying at current position`);
+        x = currentWindowX !== undefined ? currentWindowX : (note.inactiveX || 100);
+        y = currentWindowY !== undefined ? currentWindowY : (note.inactiveY || 100);
       }
       width = note.activeWidth || 300;
       height = note.activeHeight || 200;
     } else {
+      // 非アクティブ状態は記録された位置を正確に復元
       x = note.inactiveX || 100;
       y = note.inactiveY || 100;
       width = note.inactiveWidth || 150;
@@ -170,52 +268,174 @@ class StickyNotesApp {
     width = Number(width) || (note.isActive ? 300 : 150);
     height = Number(height) || (note.isActive ? 200 : 100);
 
-    // 画面境界チェック（特にアクティブ時の拡大に注意）
-    if (x + width > currentDisplay.bounds.x + currentDisplay.bounds.width) {
-      x = currentDisplay.bounds.x + currentDisplay.bounds.width - width;
-      console.log(`Adjusted X position to prevent overflow: ${x}`);
+    // 実際の位置からディスプレイを検出（より正確な方法）
+    const actualDisplay = this.findDisplayContainingPoint(x, y);
+    console.log(`Actual display for position (${x}, ${y}): ${actualDisplay.id}`);
+    
+    // 記録されたdisplayIdと実際のディスプレイの比較
+    const savedDisplayId = note.displayId;
+    const actualDisplayId = actualDisplay.id.toString();
+    const displayChanged = savedDisplayId !== actualDisplayId;
+    
+    if (displayChanged) {
+      console.log(`Display changed for note ${note.id}: ${savedDisplayId} -> ${actualDisplayId}`);
     }
-    if (y + height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
-      y = currentDisplay.bounds.y + currentDisplay.bounds.height - height;
-      console.log(`Adjusted Y position to prevent overflow: ${y}`);
-    }
-    if (x < currentDisplay.bounds.x) {
-      x = currentDisplay.bounds.x;
-      console.log(`Adjusted X position to stay within bounds: ${x}`);
-    }
-    if (y < currentDisplay.bounds.y) {
-      y = currentDisplay.bounds.y;
-      console.log(`Adjusted Y position to stay within bounds: ${y}`);
+    
+    // フォールバック: 記録されたディスプレイが存在しない場合のチェック
+    const { display: savedDisplay, shouldMigrate } = this.findValidDisplayForNote(note, note.isActive);
+    
+    // 使用するディスプレイを決定（実際の位置を優先）
+    const currentDisplay = shouldMigrate ? actualDisplay : actualDisplay;
+    
+    // 移行が必要な場合の処理
+    if (shouldMigrate) {
+      console.log(`Saved display ${savedDisplayId} no longer exists, using actual display ${actualDisplayId}`);
+    } else {
+      // 最小限の境界チェック（初回アクティブ化時は特に緩く）
+      const bounds = currentDisplay.bounds;
+      const isFirstTimeActive = note.isActive && (note.activeX === 0 && note.activeY === 0);
+      
+      // 詳細なデバッグ情報を出力
+      console.log(`=== Display Analysis for ${note.id} ===`);
+      console.log(`Note saved displayId: ${savedDisplayId}`);
+      console.log(`Actual display for position (${x}, ${y}): ${actualDisplayId}`);
+      console.log(`Display changed: ${displayChanged}`);
+      console.log(`Should migrate: ${shouldMigrate}`);
+      console.log(`Current display bounds:`, {
+        displayId: currentDisplay.id,
+        bounds: bounds,
+        notePosition: { x, y, width, height },
+        isActive: note.isActive,
+        isFirstTimeActive: isFirstTimeActive
+      });
+      
+      // 境界チェックをより寛容にする
+      if (isFirstTimeActive) {
+        // 初回アクティブ化時は境界チェックをスキップ
+        console.log(`Skipping boundary adjustment for first-time activation of note ${note.id}`);
+      } else if (displayChanged) {
+        // ディスプレイが変わった場合は最小限の調整のみ
+        console.log(`Display changed for note ${note.id}, minimal boundary adjustment only`);
+        // 完全に画面外の場合のみ調整（非常に緩い条件）
+        const isCompletelyOutside = 
+          x + width < bounds.x || x > bounds.x + bounds.width ||
+          y + height < bounds.y || y > bounds.y + bounds.height;
+          
+        if (isCompletelyOutside) {
+          const oldX = x, oldY = y;
+          x = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width - width));
+          y = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height - height));
+          console.log(`Adjusted completely outside position for display change ${note.id}: (${oldX}, ${oldY}) -> (${x}, ${y})`);
+        } else {
+          console.log(`Position OK for display change ${note.id}: (${x}, ${y}) - no adjustment needed`);
+        }
+      } else {
+        // 同じディスプレイ内での通常の境界チェック
+        const margin = 100; // より大きなマージンでユーザーの意図を尊重
+        const isVirtuallyOutside = 
+          x + margin > bounds.x + bounds.width ||  // 左端が右端より外
+          x + width - margin < bounds.x ||         // 右端が左端より外
+          y + margin > bounds.y + bounds.height || // 上端が下端より外
+          y + height - margin < bounds.y;          // 下端が上端より外
+          
+        if (isVirtuallyOutside) {
+          const oldX = x, oldY = y;
+          x = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width - width));
+          y = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height - height));
+          console.log(`Adjusted barely visible position for note ${note.id}: (${oldX}, ${oldY}) -> (${x}, ${y})`);
+        } else {
+          console.log(`Position OK for note ${note.id}: (${x}, ${y}) within display bounds`);
+        }
+      }
     }
 
-    return { x, y, width, height };
+    return { 
+      x, 
+      y, 
+      width, 
+      height, 
+      displayId: actualDisplayId,
+      shouldMigrate,
+      displayChanged
+    };
   }
 
 
-  private handleDisplayChange() {
+  private async handleDisplayChange() {
     const displays = screen.getAllDisplays();
     const primaryDisplay = screen.getPrimaryDisplay();
     
-    this.windows.forEach(async (win, noteId) => {
+    console.log('Display configuration changed. Checking note positions...');
+    
+    // 各ウィンドウの処理を並列実行
+    const migrationPromises = Array.from(this.windows.entries()).map(async ([noteId, win]) => {
       const note = await this.dataStore.getNote(noteId);
       if (!note) return;
 
       const noteDisplay = displays.find(d => d.id.toString() === note.displayId);
       
       if (!noteDisplay) {
-        const newX = primaryDisplay.bounds.x + 50;
-        const newY = primaryDisplay.bounds.y + 50;
+        console.log(`Display ${note.displayId} no longer available for note ${noteId}. Migrating to primary display.`);
         
+        // プライマリディスプレイの安全な位置を計算
+        const safeMargin = 50;
+        const newX = primaryDisplay.bounds.x + safeMargin;
+        const newY = primaryDisplay.bounds.y + safeMargin;
+        
+        // ウィンドウを新しい位置に移動
         win.setPosition(newX, newY);
-        await this.dataStore.updateNote(noteId, {
-          activeX: newX,
-          activeY: newY,
-          inactiveX: newX,
-          inactiveY: newY,
+        
+        // データベースを更新（状態に応じて適切なフィールドを更新）
+        const updates: Partial<StickyNote> = {
           displayId: primaryDisplay.id.toString()
-        });
+        };
+        
+        if (note.isActive) {
+          updates.activeX = newX;
+          updates.activeY = newY;
+        } else {
+          updates.inactiveX = newX;
+          updates.inactiveY = newY;
+        }
+        
+        await this.dataStore.updateNote(noteId, updates);
+        
+        console.log(`Note ${noteId} migrated to primary display at position (${newX}, ${newY})`);
+      } else {
+        // ディスプレイが存在する場合は、境界チェックを実行
+        const [currentX, currentY] = win.getPosition();
+        const bounds = noteDisplay.bounds;
+        
+        const isOutside = 
+          currentX < bounds.x || currentX > bounds.x + bounds.width ||
+          currentY < bounds.y || currentY > bounds.y + bounds.height;
+        
+        if (isOutside) {
+          const adjustedX = Math.max(bounds.x, Math.min(currentX, bounds.x + bounds.width - 150));
+          const adjustedY = Math.max(bounds.y, Math.min(currentY, bounds.y + bounds.height - 100));
+          
+          win.setPosition(adjustedX, adjustedY);
+          
+          // 調整された位置をデータベースに保存
+          const updates: Partial<StickyNote> = {};
+          if (note.isActive) {
+            updates.activeX = adjustedX;
+            updates.activeY = adjustedY;
+          } else {
+            updates.inactiveX = adjustedX;
+            updates.inactiveY = adjustedY;
+          }
+          
+          await this.dataStore.updateNote(noteId, updates);
+          
+          console.log(`Note ${noteId} position adjusted to stay within display bounds: (${adjustedX}, ${adjustedY})`);
+        }
       }
     });
+    
+    // すべての移行処理を並列実行
+    await Promise.all(migrationPromises);
+    console.log('Display change handling completed.');
   }
 
   private setupIpcHandlers() {
@@ -267,6 +487,12 @@ class StickyNotesApp {
       
       const finalNote = await this.dataStore.getNote(newNote.id);
       if (finalNote) {
+        // 作成位置のディスプレイIDを設定
+        const noteDisplay = this.findDisplayContainingPoint(finalNote.inactiveX, finalNote.inactiveY);
+        if (noteDisplay.id.toString() !== finalNote.displayId) {
+          await this.dataStore.updateNote(newNote.id, { displayId: noteDisplay.id.toString() });
+        }
+        
         const newWindow = await this.createNoteWindow(finalNote);
         
         // 新しい付箋を手前に表示（親付箋より上のレイヤー）
@@ -311,6 +537,12 @@ class StickyNotesApp {
         
         const finalNote = await this.dataStore.getNote(newNote.id);
         if (finalNote) {
+          // 作成位置のディスプレイIDを設定
+          const noteDisplay = this.findDisplayContainingPoint(finalNote.inactiveX, finalNote.inactiveY);
+          if (noteDisplay.id.toString() !== finalNote.displayId) {
+            await this.dataStore.updateNote(newNote.id, { displayId: noteDisplay.id.toString() });
+          }
+          
           await this.createNoteWindow(finalNote);
         }
       }
@@ -326,55 +558,76 @@ class StickyNotesApp {
       const note = await this.dataStore.getNote(noteId);
       if (!note) return;
 
-      console.log(`Current note state:`, {
-        activeX: note.activeX, activeY: note.activeY, 
-        activeWidth: note.activeWidth, activeHeight: note.activeHeight,
-        inactiveX: note.inactiveX, inactiveY: note.inactiveY,
-        inactiveWidth: note.inactiveWidth, inactiveHeight: note.inactiveHeight,
-        currentActive: note.isActive
-      });
+      // 状態変更が許可されているかチェック
+      if (!this.windowStateManager.requestStateChange(noteId, isActive)) {
+        console.log(`State change rejected for note ${noteId}`);
+        return;
+      }
 
-      // 現在の位置とサイズを保存してから状態を切り替え
+      // 現在の位置とサイズを正確に取得
       const [currentX, currentY] = win.getPosition();
       const [currentWidth, currentHeight] = win.getSize();
       
       console.log(`Current window bounds: x=${currentX}, y=${currentY}, width=${currentWidth}, height=${currentHeight}`);
+      console.log(`Switching note ${noteId} from ${note.isActive ? 'active' : 'inactive'} to ${isActive ? 'active' : 'inactive'}`);
+      
+      // 状態変更を原子的に実行
+      const updates: Partial<StickyNote> = { isActive };
       
       // 現在の状態に応じて位置・サイズを保存
       if (note.isActive && !isActive) {
         // アクティブ→非アクティブ: アクティブ状態の位置・サイズを保存
-        await this.dataStore.updateNote(noteId, {
-          activeX: currentX,
-          activeY: currentY,
-          activeWidth: currentWidth,
-          activeHeight: currentHeight
-        });
-        console.log(`Saved active bounds: x=${currentX}, y=${currentY}, width=${currentWidth}, height=${currentHeight}`);
+        updates.activeX = currentX;
+        updates.activeY = currentY;
+        updates.activeWidth = currentWidth;
+        updates.activeHeight = currentHeight;
+        console.log(`Saving active bounds: x=${currentX}, y=${currentY}, width=${currentWidth}, height=${currentHeight}`);
       } else if (!note.isActive && isActive) {
         // 非アクティブ→アクティブ: 非アクティブ状態の位置を保存
-        await this.dataStore.updateNote(noteId, {
-          inactiveX: currentX,
-          inactiveY: currentY
-        });
-        console.log(`Saved inactive position: x=${currentX}, y=${currentY}`);
+        updates.inactiveX = currentX;
+        updates.inactiveY = currentY;
+        console.log(`Saving inactive position: x=${currentX}, y=${currentY}`);
       }
 
-      // 状態を更新
-      await this.dataStore.updateNote(noteId, { isActive });
+      // 一度の更新で状態変更を実行
+      await this.dataStore.updateNote(noteId, updates);
       
-      // 更新された状態で位置とサイズを再計算
+      // 更新された状態で位置とサイズを再計算（現在のウィンドウ位置を基準に）
       const updatedNote = await this.dataStore.getNote(noteId);
       if (updatedNote) {
-        const bounds = await this.calculateNoteBounds(updatedNote);
+        const bounds = await this.calculateNoteBounds(updatedNote, currentX, currentY);
         
         console.log(`New bounds:`, bounds);
         
-        // 初回アクティブ化時は計算された位置をアクティブ位置として保存
+        // ディスプレイ変更の処理
+        const migrationUpdates: Partial<StickyNote> = {};
+        
+        if (bounds.shouldMigrate) {
+          // ディスプレイが存在しない場合の移行
+          migrationUpdates.displayId = bounds.displayId;
+          if (isActive) {
+            migrationUpdates.activeX = bounds.x;
+            migrationUpdates.activeY = bounds.y;
+          } else {
+            migrationUpdates.inactiveX = bounds.x;
+            migrationUpdates.inactiveY = bounds.y;
+          }
+          console.log(`Migrating note ${noteId} to display ${bounds.displayId} with position (${bounds.x}, ${bounds.y})`);
+          await this.dataStore.updateNote(noteId, migrationUpdates);
+        } else if (bounds.displayChanged) {
+          // 実際の位置に基づくディスプレイ変更（自然な移動）
+          migrationUpdates.displayId = bounds.displayId;
+          console.log(`Natural display change for note ${noteId}: ${updatedNote.displayId} -> ${bounds.displayId}`);
+          await this.dataStore.updateNote(noteId, migrationUpdates);
+        }
+        
+        // 初回アクティブ化時は現在位置をアクティブ位置として保存
         if (isActive && (note.activeX === 0 && note.activeY === 0)) {
-          console.log(`Saving initial active position for note ${noteId}: (${bounds.x}, ${bounds.y})`);
+          console.log(`Saving initial active position for note ${noteId}: (${currentX}, ${currentY})`);
           await this.dataStore.updateNote(noteId, {
-            activeX: bounds.x,
-            activeY: bounds.y
+            activeX: currentX,
+            activeY: currentY,
+            displayId: bounds.displayId  // ディスプレイIDも同時に更新
           });
         }
         
@@ -392,6 +645,9 @@ class StickyNotesApp {
         if (isActive) {
           win.focus();
         }
+        
+        // 状態変更完了を通知
+        this.windowStateManager.completeStateChange(noteId, isActive);
       }
     });
 
@@ -626,10 +882,17 @@ class StickyNotesApp {
   private setupSystemMinimizeDetection() {
     // Windowsのシステム最小化（Win+D、Win+M等）を検出
     if (process.platform === 'win32') {
+      let blurTimeout: NodeJS.Timeout | null = null;
+      
       // フォーカス状態の変化を監視してシステム最小化を検出
       app.on('browser-window-blur', async () => {
-        // すべてのウィンドウがフォーカスを失った場合、システム最小化の可能性
-        setTimeout(async () => {
+        // 既存のタイムアウトをクリア
+        if (blurTimeout) {
+          clearTimeout(blurTimeout);
+        }
+        
+        // デバウンスを使用して複数のブラーイベントをまとめて処理
+        blurTimeout = setTimeout(async () => {
           const allWindowsHidden = Array.from(this.windows.values()).every(win => 
             !win.isVisible() || win.isMinimized()
           );
@@ -639,11 +902,17 @@ class StickyNotesApp {
             this.isSystemMinimized = true;
             await this.handleSystemMinimize();
           }
-        }, 100); // 短い遅延で複数のイベントをまとめて処理
+        }, 200); // より長い遅延でより確実な検出
       });
 
       // ウィンドウがフォーカスを取得した場合、システム復元の可能性
       app.on('browser-window-focus', async () => {
+        // ブラータイムアウトをクリア
+        if (blurTimeout) {
+          clearTimeout(blurTimeout);
+          blurTimeout = null;
+        }
+        
         if (this.isSystemMinimized) {
           console.log('System restore detected');
           this.isSystemMinimized = false;

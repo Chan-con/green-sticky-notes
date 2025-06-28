@@ -33,6 +33,16 @@ export const StickyNoteApp: React.FC = () => {
         setIsActive(noteData.isActive);
       }
     });
+    
+    // クリーンアップ: タイムアウトをクリア
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -65,8 +75,8 @@ export const StickyNoteApp: React.FC = () => {
   const handleNoteClick = () => {
     if (!isActive && note) {
       setIsActive(true);
+      // setNoteActive で状態更新も同時に行うので、updateNote は不要
       window.electronAPI.setNoteActive(note.id, true);
-      window.electronAPI.updateNote(note.id, { isActive: true });
       
       setTimeout(() => {
         contentRef.current?.focus();
@@ -84,18 +94,29 @@ export const StickyNoteApp: React.FC = () => {
       .join('\n');
   };
 
+  // ブラーイベントのデバウンス用のタイムアウト
+  const blurTimeoutRef = useRef<NodeJS.Timeout>();
+
   const handleBlur = () => {
     if (isActive && note && !note.isLocked) {
-      const isEmpty = !getContentAsString(note.content).trim();
-      
-      if (isEmpty) {
-        window.electronAPI.deleteNote(note.id);
-        return;
+      // 既存のタイムアウトをクリア
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current);
       }
+      
+      // デバウンスでブラー処理を実行
+      blurTimeoutRef.current = setTimeout(() => {
+        const isEmpty = !getContentAsString(note.content).trim();
+        
+        if (isEmpty) {
+          window.electronAPI.deleteNote(note.id);
+          return;
+        }
 
-      setIsActive(false);
-      window.electronAPI.setNoteActive(note.id, false);
-      window.electronAPI.updateNote(note.id, { isActive: false });
+        setIsActive(false);
+        // setNoteActive で状態更新も同時に行うので、updateNote は不要
+        window.electronAPI.setNoteActive(note.id, false);
+      }, 150); // ブラーイベントのデバウンス
     }
   };
 
