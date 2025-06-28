@@ -233,7 +233,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
             title={note.isLocked ? "アクティブロック解除" : "アクティブロック"}
             onMouseDown={(e) => handleButtonClick(e, onToggleLock)}
           >
-            <span style={note.isLocked ? {} : { transform: 'rotate(-20deg)', display: 'inline-block' }}>
+            <span style={note.isLocked ? {} : { transform: 'rotate(40deg)', display: 'inline-block' }}>
               {note.isLocked ? '🔒' : '🔓'}
             </span>
           </button>
