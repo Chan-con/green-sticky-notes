@@ -338,6 +338,14 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
       <div className="note-header" style={headerStyle} onClick={(e) => e.stopPropagation()}>
         <div className="header-menu">
           <button
+            className="menu-button"
+            title="新規付箋追加"
+            onMouseDown={(e) => handleButtonClick(e, onCreateNote)}
+          >
+            +
+          </button>
+          
+          <button
             ref={fontButtonRef}
             className="menu-button"
             title="文字サイズ"
