@@ -140,6 +140,10 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   // ダブルクリック検出用
   const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
   const [clickCount, setClickCount] = useState(0);
+  
+  // ポップアップ要素への参照
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const fontSizePickerRef = useRef<HTMLDivElement>(null);
 
   // isActiveが変更されたときにポップアップを閉じる
   useEffect(() => {
@@ -150,29 +154,51 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
 
   // ポップアップ外クリックで閉じる
   useEffect(() => {
-    const handleClickOutside = (event: Event) => {
+    const handleClickOutside = (event: MouseEvent) => {
       if (showColorPicker || showFontSizePicker) {
         const target = event.target as Element;
         
-        // より厳密にポップアップ内部の要素をチェック
-        const isInsideColorPicker = target.closest('.color-picker-popup');
-        const isInsideFontSizePicker = target.closest('.font-size-popup');
-        const isMenuButton = target.closest('.menu-button');
-        
-        // ポップアップ内部のクリックでない場合のみ閉じる
-        if (!isInsideColorPicker && !isInsideFontSizePicker && !isMenuButton) {
+        // メニューボタンのクリックは無視
+        if (target.closest('.menu-button')) {
+          return;
+        }
+
+        let isInsidePopup = false;
+
+        // カラーピッカーが開いている場合の物理的境界判定
+        if (showColorPicker && colorPickerRef.current) {
+          const rect = colorPickerRef.current.getBoundingClientRect();
+          const x = event.clientX;
+          const y = event.clientY;
+          
+          if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+            isInsidePopup = true;
+          }
+        }
+
+        // フォントサイズピッカーが開いている場合の物理的境界判定
+        if (showFontSizePicker && fontSizePickerRef.current) {
+          const rect = fontSizePickerRef.current.getBoundingClientRect();
+          const x = event.clientX;
+          const y = event.clientY;
+          
+          if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+            isInsidePopup = true;
+          }
+        }
+
+        // ポップアップ外部のクリックの場合のみ閉じる
+        if (!isInsidePopup) {
           closeAllPopups();
         }
       }
     };
 
     if (showColorPicker || showFontSizePicker) {
-      // clickイベントを使用してより確実な外部クリック検出
-      document.addEventListener('click', handleClickOutside, true);
-      document.addEventListener('contextmenu', handleClickOutside, true);
+      // マウスイベントを使用して座標ベースの判定
+      document.addEventListener('mousedown', handleClickOutside, true);
       return () => {
-        document.removeEventListener('click', handleClickOutside, true);
-        document.removeEventListener('contextmenu', handleClickOutside, true);
+        document.removeEventListener('mousedown', handleClickOutside, true);
       };
     }
   }, [showColorPicker, showFontSizePicker]);
@@ -351,6 +377,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
 
       {showColorPicker && (
         <div 
+          ref={colorPickerRef}
           className="color-picker-popup" 
           style={{ top: `${popupPosition.top}px`, left: `${popupPosition.left}px` }}
           onClick={(e) => e.stopPropagation()}
@@ -368,6 +395,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  e.nativeEvent.stopImmediatePropagation();
                   
                   if (clickTimeout) {
                     clearTimeout(clickTimeout);
@@ -393,6 +421,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  e.nativeEvent.stopImmediatePropagation();
                   // 右クリック: ヘッダー色変更
                   handleHeaderColorChange(color);
                   
@@ -411,6 +440,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
 
       {showFontSizePicker && (
         <div 
+          ref={fontSizePickerRef}
           className="font-size-popup" 
           style={{ top: `${popupPosition.top}px`, left: `${popupPosition.left}px` }}
           onClick={(e) => e.stopPropagation()}
@@ -424,11 +454,13 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
                 handleFontSizeChange(size);
               }}
               onMouseDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
               }}
             >
               {size}px
