@@ -52,8 +52,9 @@ const colorOptions = [
   '#FFCDD2', '#F8BBD9', '#E1BEE7', '#C5CAE9', '#BBDEFB',
   '#B2EBF2', '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0F4C3',
   
-  // 白・淡いグレー系（黒文字が読める範囲）
-  '#FFFFFF', '#FAFAFA', '#F5F5F5', '#EEEEEE', '#E8E8E8'
+  // 白・グレー系（黒文字が読める範囲）
+  '#FFFFFF', '#FAFAFA', '#F5F5F5', '#EEEEEE', '#E8E8E8',
+  '#DEDEDE', '#D5D5D5', '#CCCCCC'
 ];
 
 const fontSizes = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 48];
