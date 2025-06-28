@@ -63,6 +63,7 @@ export class DataStore {
       inactiveWidth: minWidth,
       inactiveHeight: minHeight,
       backgroundColor: note.backgroundColor || '#CCFFE6',
+      headerColor: note.headerColor, // headerColorはオプショナルなのでundefinedでも良い
       fontSize: note.fontSize || 14,
       isPinned: note.isPinned || false,
       isLocked: note.isLocked || false,

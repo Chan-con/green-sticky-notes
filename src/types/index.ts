@@ -23,6 +23,7 @@ export interface StickyNote {
   inactiveWidth: number;
   inactiveHeight: number;
   backgroundColor: string;
+  headerColor?: string; // ヘッダー色（オプショナル、未設定時はbackgroundColorを使用）
   fontSize: number;
   isPinned: boolean;
   isLocked: boolean;
@@ -48,5 +49,6 @@ export type DisplayInfo = {
 export interface AppSettings {
   defaultFontSize: number;
   defaultBackgroundColor: string;
+  defaultHeaderColor?: string; // デフォルトヘッダー色（オプショナル）
   followSystemMinimize: boolean;
 }

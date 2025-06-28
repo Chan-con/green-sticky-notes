@@ -42,6 +42,87 @@ const colorOptions = [
 
 const fontSizes = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 48];
 
+// 色の自動調整ユーティリティ関数
+const hexToHsl = (hex: string): [number, number, number] => {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+
+  return [h * 360, s * 100, l * 100];
+};
+
+const hslToHex = (h: number, s: number, l: number): string => {
+  h /= 360;
+  s /= 100;
+  l /= 100;
+
+  const hue2rgb = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+
+  let r, g, b;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+
+  const toHex = (c: number) => {
+    const hex = Math.round(c * 255).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  };
+
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+};
+
+// 調和の取れたヘッダー色を生成する関数
+const generateHeaderColor = (bodyColor: string): string => {
+  const [h, s, l] = hexToHsl(bodyColor);
+  
+  // 明度を調整してヘッダー色を生成
+  // ボディが明るい場合は少し暗く、暗い場合は少し明るく
+  let newL = l;
+  if (l > 70) {
+    // 明るい色の場合、少し暗くして深みを出す
+    newL = Math.max(l - 15, 50);
+  } else if (l < 40) {
+    // 暗い色の場合、少し明るくしてコントラストを出す
+    newL = Math.min(l + 20, 60);
+  } else {
+    // 中間的な明度の場合、彩度を少し上げる
+    newL = l + 10;
+  }
+  
+  // 彩度も少し調整して統一感を出す
+  const newS = Math.min(s + 5, 100);
+  
+  return hslToHex(h, newS, newL);
+};
+
 export const NoteHeader: React.FC<NoteHeaderProps> = ({
   note,
   isActive,
@@ -55,6 +136,10 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 });
   const colorButtonRef = useRef<HTMLButtonElement>(null);
   const fontButtonRef = useRef<HTMLButtonElement>(null);
+  
+  // ダブルクリック検出用
+  const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [clickCount, setClickCount] = useState(0);
 
   // isActiveが変更されたときにポップアップを閉じる
   useEffect(() => {
@@ -149,8 +234,9 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   };
 
   if (!isActive) {
+    const headerStyle = note.headerColor ? { backgroundColor: note.headerColor } : {};
     return (
-      <div className="note-header" onClick={(e) => e.stopPropagation()}>
+      <div className="note-header" style={headerStyle} onClick={(e) => e.stopPropagation()}>
         <div className="header-menu">
           <button
             className="menu-button"
@@ -177,14 +263,30 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
     setShowColorPicker(false);
   };
 
+  const handleHeaderColorChange = (color: string) => {
+    onUpdateNote({ headerColor: color });
+    setShowColorPicker(false);
+  };
+
+  const handleAutoColorAdjust = (color: string) => {
+    const headerColor = generateHeaderColor(color);
+    onUpdateNote({ 
+      backgroundColor: color,
+      headerColor: headerColor
+    });
+    setShowColorPicker(false);
+  };
+
   const handleFontSizeChange = (fontSize: number) => {
     onUpdateNote({ fontSize });
     setShowFontSizePicker(false);
   };
 
+  const headerStyle = note.headerColor ? { backgroundColor: note.headerColor } : {};
+  
   return (
     <>
-      <div className="note-header" onClick={(e) => e.stopPropagation()}>
+      <div className="note-header" style={headerStyle} onClick={(e) => e.stopPropagation()}>
         <div className="header-menu">
           <button
             ref={fontButtonRef}
@@ -252,10 +354,45 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
                 key={color}
                 className={`color-option ${note.backgroundColor === color ? 'selected' : ''}`}
                 style={{ backgroundColor: color }}
-                onMouseDown={(e) => {
+                title="左クリック: ボディ色変更 | 右クリック: ヘッダー色変更 | ダブルクリック: 自動調整"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  handleColorChange(color);
+                  
+                  if (clickTimeout) {
+                    clearTimeout(clickTimeout);
+                    setClickTimeout(null);
+                  }
+
+                  const newCount = clickCount + 1;
+                  setClickCount(newCount);
+
+                  if (newCount === 1) {
+                    // 単一クリック: 300ms待機してダブルクリックでないことを確認
+                    const timeout = setTimeout(() => {
+                      handleColorChange(color);
+                      setClickCount(0);
+                    }, 300);
+                    setClickTimeout(timeout);
+                  } else if (newCount === 2) {
+                    // ダブルクリック: 自動調整
+                    handleAutoColorAdjust(color);
+                    setClickCount(0);
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // 右クリック: ヘッダー色変更
+                  handleHeaderColorChange(color);
+                  
+                  // 進行中のクリックカウントをリセット
+                  if (clickTimeout) {
+                    clearTimeout(clickTimeout);
+                    setClickTimeout(null);
+                  }
+                  setClickCount(0);
                 }}
               />
             ))}
