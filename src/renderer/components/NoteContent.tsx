@@ -1,5 +1,5 @@
 import React, { forwardRef } from 'react';
-import { StickyNote } from '../../types';
+import { StickyNote, RichContent } from '../../types';
 
 interface NoteContentProps {
   note: StickyNote;
@@ -12,6 +12,16 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
   ({ note, isActive, onContentChange, onBlur }, ref) => {
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       onContentChange(e.target.value);
+    };
+
+    const getContentAsString = (content: string | RichContent): string => {
+      if (typeof content === 'string') {
+        return content;
+      }
+      return content.blocks
+        .filter(block => block.type === 'text')
+        .map(block => block.content)
+        .join('\n');
     };
 
     const handleContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
@@ -30,7 +40,7 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
         <textarea
           ref={ref}
           className="note-content"
-          value={note.content}
+          value={getContentAsString(note.content)}
           onChange={handleChange}
           onBlur={onBlur}
           onContextMenu={handleContextMenu}
@@ -45,10 +55,10 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
         className="note-content stay-mode"
         style={{ 
           fontSize: '12px',
-          color: note.content ? 'inherit' : 'rgba(0, 0, 0, 0.4)'
+          color: getContentAsString(note.content) ? 'inherit' : 'rgba(0, 0, 0, 0.4)'
         }}
       >
-        {note.content ? truncateText(note.content) : '空の付箋'}
+        {getContentAsString(note.content) ? truncateText(getContentAsString(note.content)) : '空の付箋'}
       </div>
     );
   }

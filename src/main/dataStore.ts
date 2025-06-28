@@ -169,7 +169,8 @@ export class DataStore {
       if (!fs.existsSync(this.settingsFile)) {
         const defaultSettings: AppSettings = {
           defaultFontSize: 14,
-          defaultBackgroundColor: '#CCFFE6'  // パステルグリーン
+          defaultBackgroundColor: '#CCFFE6',  // パステルグリーン
+          followSystemMinimize: false
         };
         await this.saveSettings(defaultSettings);
         return defaultSettings;
@@ -180,7 +181,8 @@ export class DataStore {
       console.error('Error loading settings:', error);
       return {
         defaultFontSize: 14,
-        defaultBackgroundColor: '#CCFFE6'
+        defaultBackgroundColor: '#CCFFE6',
+        followSystemMinimize: false
       };
     }
   }

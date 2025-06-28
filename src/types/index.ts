@@ -1,6 +1,17 @@
+export interface ContentBlock {
+  id: string;
+  type: 'text' | 'image';
+  content: string;
+  metadata?: any;
+}
+
+export interface RichContent {
+  blocks: ContentBlock[];
+}
+
 export interface StickyNote {
   id: string;
-  content: string;
+  content: string | RichContent;
   // アクティブ状態の位置とサイズ
   activeX: number;
   activeY: number;
@@ -37,4 +48,5 @@ export type DisplayInfo = {
 export interface AppSettings {
   defaultFontSize: number;
   defaultBackgroundColor: string;
+  followSystemMinimize: boolean;
 }

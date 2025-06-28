@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StickyNote } from '../../types';
+import { StickyNote, RichContent } from '../../types';
 import { NoteHeader } from './NoteHeader';
 import { NoteContent } from './NoteContent';
 
@@ -74,9 +74,19 @@ export const StickyNoteApp: React.FC = () => {
     }
   };
 
+  const getContentAsString = (content: string | RichContent): string => {
+    if (typeof content === 'string') {
+      return content;
+    }
+    return content.blocks
+      .filter(block => block.type === 'text')
+      .map(block => block.content)
+      .join('\n');
+  };
+
   const handleBlur = () => {
     if (isActive && note && !note.isLocked) {
-      const isEmpty = !note.content.trim();
+      const isEmpty = !getContentAsString(note.content).trim();
       
       if (isEmpty) {
         window.electronAPI.deleteNote(note.id);

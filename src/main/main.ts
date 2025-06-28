@@ -8,10 +8,12 @@ class StickyNotesApp {
   private dataStore: DataStore;
   private tray: Tray | null = null;
   private isQuitting = false;
+  private isSystemMinimized = false;
 
   constructor() {
     this.dataStore = new DataStore();
     this.setupEventHandlers();
+    this.setupSystemMinimizeDetection();
   }
 
   private setupEventHandlers() {
@@ -542,6 +544,7 @@ class StickyNotesApp {
     if (!this.tray) return;
 
     const isAutoStartEnabled = await this.getAutoStartStatus();
+    const settings = await this.dataStore.getSettings();
     
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -559,6 +562,15 @@ class StickyNotesApp {
         checked: isAutoStartEnabled,
         click: async () => {
           await this.toggleAutoStart();
+          this.updateTrayMenu(); // メニューを更新
+        }
+      },
+      {
+        label: '他のアプリと一緒に最小化',
+        type: 'checkbox',
+        checked: settings.followSystemMinimize,
+        click: async () => {
+          await this.toggleFollowSystemMinimize();
           this.updateTrayMenu(); // メニューを更新
         }
       },
@@ -600,6 +612,61 @@ class StickyNotesApp {
       openAtLogin: !isEnabled,
       openAsHidden: true
     });
+  }
+
+  private async toggleFollowSystemMinimize() {
+    const settings = await this.dataStore.getSettings();
+    const newSettings = {
+      ...settings,
+      followSystemMinimize: !settings.followSystemMinimize
+    };
+    await this.dataStore.saveSettings(newSettings);
+  }
+
+  private setupSystemMinimizeDetection() {
+    // Windowsのシステム最小化（Win+D、Win+M等）を検出
+    if (process.platform === 'win32') {
+      // フォーカス状態の変化を監視してシステム最小化を検出
+      app.on('browser-window-blur', async () => {
+        // すべてのウィンドウがフォーカスを失った場合、システム最小化の可能性
+        setTimeout(async () => {
+          const allWindowsHidden = Array.from(this.windows.values()).every(win => 
+            !win.isVisible() || win.isMinimized()
+          );
+          
+          if (allWindowsHidden && !this.isSystemMinimized) {
+            console.log('System minimize detected');
+            this.isSystemMinimized = true;
+            await this.handleSystemMinimize();
+          }
+        }, 100); // 短い遅延で複数のイベントをまとめて処理
+      });
+
+      // ウィンドウがフォーカスを取得した場合、システム復元の可能性
+      app.on('browser-window-focus', async () => {
+        if (this.isSystemMinimized) {
+          console.log('System restore detected');
+          this.isSystemMinimized = false;
+          await this.handleSystemRestore();
+        }
+      });
+    }
+  }
+
+  private async handleSystemMinimize() {
+    const settings = await this.dataStore.getSettings();
+    if (settings.followSystemMinimize) {
+      console.log('Following system minimize - hiding all windows');
+      this.hideAllWindows();
+    }
+  }
+
+  private async handleSystemRestore() {
+    const settings = await this.dataStore.getSettings();
+    if (settings.followSystemMinimize) {
+      console.log('Following system restore - showing all windows');
+      this.showAllWindows();
+    }
   }
 }
 

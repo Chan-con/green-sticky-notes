@@ -63,6 +63,28 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
     }
   }, [isActive]);
 
+  // ポップアップ外クリックで閉じる
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showColorPicker || showFontSizePicker) {
+        const target = event.target as Element;
+        // ポップアップ内やボタン内のクリックでない場合は閉じる
+        if (!target.closest('.color-picker-popup') && 
+            !target.closest('.font-size-popup') &&
+            !target.closest('.menu-button')) {
+          closeAllPopups();
+        }
+      }
+    };
+
+    if (showColorPicker || showFontSizePicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showColorPicker, showFontSizePicker]);
+
   const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
     e.preventDefault();
     e.stopPropagation();
@@ -211,7 +233,9 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
             title={note.isLocked ? "アクティブロック解除" : "アクティブロック"}
             onMouseDown={(e) => handleButtonClick(e, onToggleLock)}
           >
-            {note.isLocked ? '🔒' : '🔓'}
+            <span style={note.isLocked ? {} : { transform: 'rotate(-20deg)', display: 'inline-block' }}>
+              {note.isLocked ? '🔒' : '🔓'}
+            </span>
           </button>
         </div>
       </div>
