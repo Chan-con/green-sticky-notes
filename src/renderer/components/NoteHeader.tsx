@@ -43,6 +43,7 @@ const colorOptions = [
   '#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF',
   '#D4A4FF', '#FFD1DC', '#FFE5B4', '#C7E9B4', '#B4D7FF',
   '#E6B3FF', '#FFBABA', '#FFC9A0', '#A0FFAB', '#A0E6FF',
+  '#FFE4E1', '#E1F5FE', '#F3E5F5',
   
   // レインボーグラデーション（鮮やかで読みやすい）
   '#FF8A80', '#FFB74D', '#FFF176', '#AED581', '#81C784',
@@ -54,7 +55,7 @@ const colorOptions = [
   
   // 白・グレー系（黒文字が読める範囲）
   '#FFFFFF', '#FAFAFA', '#F5F5F5', '#EEEEEE', '#E8E8E8',
-  '#DEDEDE', '#D5D5D5', '#CCCCCC'
+  '#DEDEDE', '#D5D5D5', '#CCCCCC', '#C0C0C0', '#B8B8B8'
 ];
 
 const fontSizes = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 48];
