@@ -804,6 +804,11 @@ class StickyNotesApp {
     
     const contextMenu = Menu.buildFromTemplate([
       {
+        label: '新しい付箋を追加',
+        click: () => this.createNewNoteFromTray()
+      },
+      { type: 'separator' },
+      {
         label: 'すべてのノートを表示',
         click: () => this.showAllWindows()
       },
@@ -838,6 +843,32 @@ class StickyNotesApp {
     ]);
 
     this.tray.setContextMenu(contextMenu);
+  }
+
+  private async createNewNoteFromTray() {
+    try {
+      // デフォルト設定で新規付箋を作成（引き継ぎ元なし）
+      const newNote = await this.dataStore.createNote();
+      
+      // 作成位置のディスプレイIDを設定
+      const noteDisplay = this.findDisplayContainingPoint(newNote.inactiveX, newNote.inactiveY);
+      if (noteDisplay.id.toString() !== newNote.displayId) {
+        await this.dataStore.updateNote(newNote.id, { displayId: noteDisplay.id.toString() });
+      }
+      
+      // 最終的な付箋データを取得
+      const finalNote = await this.dataStore.getNote(newNote.id);
+      if (finalNote) {
+        // ウィンドウを作成して表示
+        const newWindow = await this.createNoteWindow(finalNote);
+        newWindow.show();
+        newWindow.focus();
+        
+        console.log(`New note created from tray: ${newNote.id}`);
+      }
+    } catch (error) {
+      console.error('Failed to create note from tray:', error);
+    }
   }
 
   private showAllWindows() {
