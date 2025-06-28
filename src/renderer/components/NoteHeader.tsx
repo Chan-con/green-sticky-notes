@@ -39,13 +39,21 @@ const colorOptions = [
   '#F0E6FF', '#E6CCFF', '#DCB3FF', '#D199FF', '#C77FFF',
   '#FFE6F5', '#FFCCEB', '#FFB3E0', '#FF99D6', '#FF7FCC',
   
-  // 追加カラー（少し深みのある色）
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57',
-  '#FF9FF3', '#54A0FF', '#5F27CD', '#00D2D3', '#FF9F43',
+  // カラフルなグラデーション（明るく読みやすい色）
+  '#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF',
+  '#D4A4FF', '#FFD1DC', '#FFE5B4', '#C7E9B4', '#B4D7FF',
+  '#E6B3FF', '#FFBABA', '#FFC9A0', '#A0FFAB', '#A0E6FF',
   
-  // ホワイト・グレー・ブラック系
-  '#FFFFFF', '#F5F5F5', '#E0E0E0', '#BDBDBD', '#9E9E9E',
-  '#757575', '#424242', '#212121', '#000000'
+  // レインボーグラデーション（鮮やかで読みやすい）
+  '#FF8A80', '#FFB74D', '#FFF176', '#AED581', '#81C784',
+  '#64B5F6', '#9575CD', '#F06292', '#FF8A65', '#FFCC02',
+  
+  // パステルグラデーション
+  '#FFCDD2', '#F8BBD9', '#E1BEE7', '#C5CAE9', '#BBDEFB',
+  '#B2EBF2', '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0F4C3',
+  
+  // 白・淡いグレー系（黒文字が読める範囲）
+  '#FFFFFF', '#FAFAFA', '#F5F5F5', '#EEEEEE', '#E8E8E8'
 ];
 
 const fontSizes = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 48];
