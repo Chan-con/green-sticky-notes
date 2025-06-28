@@ -115,6 +115,7 @@ export class DataStore {
       inactiveWidth: minWidth,
       inactiveHeight: minHeight,
       backgroundColor: nearNote ? nearNote.backgroundColor : settings.defaultBackgroundColor,
+      headerColor: nearNote ? nearNote.headerColor : settings.defaultHeaderColor, // 親付箋のヘッダー色を引き継ぐ
       fontSize: nearNote ? nearNote.fontSize : settings.defaultFontSize,
       isPinned: nearNote ? nearNote.isPinned : false,  // 親付箋のピン設定を引き継ぐ
       isLocked: false,
