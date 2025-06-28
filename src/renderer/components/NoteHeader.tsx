@@ -158,44 +158,42 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
       if (showColorPicker || showFontSizePicker) {
         const target = event.target as Element;
         
-        // メニューボタンのクリックは無視
-        if (target.closest('.menu-button')) {
-          return;
-        }
-
-        let isInsidePopup = false;
-
-        // カラーピッカーが開いている場合の物理的境界判定
+        // より包括的にポップアップ要素をチェック
+        const isInsideColorPicker = target.closest('.color-picker-popup');
+        const isInsideFontSizePicker = target.closest('.font-size-popup');
+        const isMenuButton = target.closest('.menu-button');
+        
+        // さらに、物理的境界判定も追加でチェック
+        let isInsidePopupArea = false;
+        
         if (showColorPicker && colorPickerRef.current) {
           const rect = colorPickerRef.current.getBoundingClientRect();
           const x = event.clientX;
           const y = event.clientY;
           
           if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-            isInsidePopup = true;
+            isInsidePopupArea = true;
           }
         }
 
-        // フォントサイズピッカーが開いている場合の物理的境界判定
         if (showFontSizePicker && fontSizePickerRef.current) {
           const rect = fontSizePickerRef.current.getBoundingClientRect();
           const x = event.clientX;
           const y = event.clientY;
           
           if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-            isInsidePopup = true;
+            isInsidePopupArea = true;
           }
         }
 
-        // ポップアップ外部のクリックの場合のみ閉じる
-        if (!isInsidePopup) {
+        // DOM検索または座標判定のいずれかで内部と判定されれば閉じない
+        if (!isInsideColorPicker && !isInsideFontSizePicker && !isMenuButton && !isInsidePopupArea) {
           closeAllPopups();
         }
       }
     };
 
     if (showColorPicker || showFontSizePicker) {
-      // マウスイベントを使用して座標ベースの判定
       document.addEventListener('mousedown', handleClickOutside, true);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside, true);
@@ -380,9 +378,21 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           ref={colorPickerRef}
           className="color-picker-popup" 
           style={{ top: `${popupPosition.top}px`, left: `${popupPosition.left}px` }}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+          }}
         >
           <div className="color-grid">
             {colorOptions.map((color) => (
@@ -443,9 +453,21 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           ref={fontSizePickerRef}
           className="font-size-popup" 
           style={{ top: `${popupPosition.top}px`, left: `${popupPosition.left}px` }}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+          }}
         >
           {fontSizes.map((size) => (
             <div
