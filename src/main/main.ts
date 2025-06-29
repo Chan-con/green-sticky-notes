@@ -10,13 +10,11 @@ class StickyNotesApp {
   private windowStateManager: WindowStateManager;
   private tray: Tray | null = null;
   private isQuitting = false;
-  private isSystemMinimized = false;
 
   constructor() {
     this.dataStore = new DataStore();
     this.windowStateManager = new WindowStateManager();
     this.setupEventHandlers();
-    this.setupSystemMinimizeDetection();
   }
 
   private setupEventHandlers() {
@@ -826,15 +824,6 @@ class StickyNotesApp {
           this.updateTrayMenu(); // メニューを更新
         }
       },
-      {
-        label: '他のアプリと一緒に最小化',
-        type: 'checkbox',
-        checked: settings.followSystemMinimize,
-        click: async () => {
-          await this.toggleFollowSystemMinimize();
-          this.updateTrayMenu(); // メニューを更新
-        }
-      },
       { type: 'separator' },
       {
         label: 'アプリを終了',
@@ -901,73 +890,8 @@ class StickyNotesApp {
     });
   }
 
-  private async toggleFollowSystemMinimize() {
-    const settings = await this.dataStore.getSettings();
-    const newSettings = {
-      ...settings,
-      followSystemMinimize: !settings.followSystemMinimize
-    };
-    await this.dataStore.saveSettings(newSettings);
-  }
 
-  private setupSystemMinimizeDetection() {
-    // Windowsのシステム最小化（Win+D、Win+M等）を検出
-    if (process.platform === 'win32') {
-      let blurTimeout: NodeJS.Timeout | null = null;
-      
-      // フォーカス状態の変化を監視してシステム最小化を検出
-      app.on('browser-window-blur', async () => {
-        // 既存のタイムアウトをクリア
-        if (blurTimeout) {
-          clearTimeout(blurTimeout);
-        }
-        
-        // デバウンスを使用して複数のブラーイベントをまとめて処理
-        blurTimeout = setTimeout(async () => {
-          const allWindowsHidden = Array.from(this.windows.values()).every(win => 
-            !win.isVisible() || win.isMinimized()
-          );
-          
-          if (allWindowsHidden && !this.isSystemMinimized) {
-            console.log('System minimize detected');
-            this.isSystemMinimized = true;
-            await this.handleSystemMinimize();
-          }
-        }, 200); // より長い遅延でより確実な検出
-      });
 
-      // ウィンドウがフォーカスを取得した場合、システム復元の可能性
-      app.on('browser-window-focus', async () => {
-        // ブラータイムアウトをクリア
-        if (blurTimeout) {
-          clearTimeout(blurTimeout);
-          blurTimeout = null;
-        }
-        
-        if (this.isSystemMinimized) {
-          console.log('System restore detected');
-          this.isSystemMinimized = false;
-          await this.handleSystemRestore();
-        }
-      });
-    }
-  }
-
-  private async handleSystemMinimize() {
-    const settings = await this.dataStore.getSettings();
-    if (settings.followSystemMinimize) {
-      console.log('Following system minimize - hiding all windows');
-      this.hideAllWindows();
-    }
-  }
-
-  private async handleSystemRestore() {
-    const settings = await this.dataStore.getSettings();
-    if (settings.followSystemMinimize) {
-      console.log('Following system restore - showing all windows');
-      this.showAllWindows();
-    }
-  }
 }
 
 new StickyNotesApp();

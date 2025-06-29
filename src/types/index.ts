@@ -50,5 +50,4 @@ export interface AppSettings {
   defaultFontSize: number;
   defaultBackgroundColor: string;
   defaultHeaderColor?: string; // デフォルトヘッダー色（オプショナル）
-  followSystemMinimize: boolean;
 }
