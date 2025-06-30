@@ -11,49 +11,40 @@ interface NoteHeaderProps {
 }
 
 const colorOptions = [
-  // ピンク系パステル
-  '#FFE1E6', '#FFCCD5', '#FFB3C1', '#FF9BAE', '#FF7F9B',
+  // レッド・ピンク系グラデーション
+  '#FF8A80', '#FFB3BA', '#FFCDD2', '#FFD1DC', '#FFE1E6',
+  '#F06292', '#FF99D6', '#F8BBD9', '#FFCCEB', '#FFE6F5',
+  '#FF7F9B', '#FF9BAE', '#FFB3C1', '#FFCCD5', '#FFE4E1',
   
-  // コーラル・オレンジ系パステル
-  '#FFE4CC', '#FFCF99', '#FFB366', '#FF9F59', '#FF8A4D',
+  // オレンジ・コーラル系グラデーション  
+  '#FF8A65', '#FF9F59', '#FFB366', '#FFCF99', '#FFE4CC',
+  '#FF8A4D', '#FFBABA', '#FFC9A0', '#FFE5B4', '#FFDFBA',
   
-  // イエロー系パステル
-  '#FFF5CC', '#FFEB99', '#FFE066', '#FFD633', '#FFCC00',
+  // イエロー系グラデーション
+  '#FFCC02', '#FFD633', '#FFE066', '#FFEB99', '#FFF5CC',
+  '#FFF176', '#FFFFBA', '#F0F4C3', '#DCEDC8', '#DCFF66',
   
-  // ライム・イエローグリーン系パステル
-  '#F0FFCC', '#E6FF99', '#DCFF66', '#D1FF33', '#C7FF00',
+  // ライム・グリーン系グラデーション
+  '#AED581', '#BAFFC9', '#C7E9B4', '#C8E6C9', '#CCFFE6',
+  '#81C784', '#99FF33', '#B3FF66', '#CCFF99', '#E6FFCC',
+  '#7FFF00', '#C7FF00', '#D1FF33', '#E6FF99', '#F0FFCC',
+  '#00FF7F', '#33FF99', '#66FFB3', '#99FFCC', '#A0FFAB',
   
-  // グリーン系パステル（デフォルト含む）
-  '#E6FFCC', '#CCFF99', '#B3FF66', '#99FF33', '#7FFF00',
-  '#CCFFE6', '#99FFCC', '#66FFB3', '#33FF99', '#00FF7F',
+  // シアン・ティール系グラデーション
+  '#00FFFF', '#33FFFF', '#66FFFF', '#99FFFF', '#CCFFFF',
+  '#00BFFF', '#33CCFF', '#66D9FF', '#99E6FF', '#CCF2FF',
+  '#B2EBF2', '#B2DFDB', '#A0E6FF', '#E1F5FE',
   
-  // ミント・ティール系パステル
-  '#CCFFFF', '#99FFFF', '#66FFFF', '#33FFFF', '#00FFFF',
-  '#CCF2FF', '#99E6FF', '#66D9FF', '#33CCFF', '#00BFFF',
+  // ブルー系グラデーション
+  '#64B5F6', '#7FBFFF', '#99CCFF', '#B3D9FF', '#CCE6FF',
+  '#BAE1FF', '#B4D7FF', '#BBDEFB', '#C5CAE9', '#E6F2FF',
+  '#7F7FFF', '#9999FF', '#B3B3FF', '#CCCCFF', '#E6E6FF',
   
-  // ブルー系パステル
-  '#E6F2FF', '#CCE6FF', '#B3D9FF', '#99CCFF', '#7FBFFF',
-  '#E6E6FF', '#CCCCFF', '#B3B3FF', '#9999FF', '#7F7FFF',
+  // パープル・バイオレット系グラデーション
+  '#9575CD', '#C77FFF', '#D199FF', '#DCB3FF', '#E6CCFF',
+  '#D4A4FF', '#E1BEE7', '#E6B3FF', '#F0E6FF', '#F3E5F5',
   
-  // パープル系パステル
-  '#F0E6FF', '#E6CCFF', '#DCB3FF', '#D199FF', '#C77FFF',
-  '#FFE6F5', '#FFCCEB', '#FFB3E0', '#FF99D6', '#FF7FCC',
-  
-  // カラフルなグラデーション（明るく読みやすい色）
-  '#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF',
-  '#D4A4FF', '#FFD1DC', '#FFE5B4', '#C7E9B4', '#B4D7FF',
-  '#E6B3FF', '#FFBABA', '#FFC9A0', '#A0FFAB', '#A0E6FF',
-  '#FFE4E1', '#E1F5FE', '#F3E5F5',
-  
-  // レインボーグラデーション（鮮やかで読みやすい）
-  '#FF8A80', '#FFB74D', '#FFF176', '#AED581', '#81C784',
-  '#64B5F6', '#9575CD', '#F06292', '#FF8A65', '#FFCC02',
-  
-  // パステルグラデーション
-  '#FFCDD2', '#F8BBD9', '#E1BEE7', '#C5CAE9', '#BBDEFB',
-  '#B2EBF2', '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0F4C3',
-  
-  // 白・グレー系（黒文字が読める範囲）
+  // ホワイト・グレー系グラデーション（カラフルの下に配置）
   '#FFFFFF', '#FAFAFA', '#F5F5F5', '#EEEEEE', '#E8E8E8',
   '#DEDEDE', '#D5D5D5', '#CCCCCC', '#C0C0C0', '#B8B8B8'
 ];
