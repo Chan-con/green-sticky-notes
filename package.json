@@ -60,7 +60,16 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": true
+      "deleteAppDataOnUninstall": true,
+      "createDesktopShortcut": false,
+      "allowElevation": true,
+      "perMachine": false,
+      "shortcutName": "Green Sticky Notes",
+      "installerIcon": "src/assets/icons/win/icon.ico",
+      "uninstallerIcon": "src/assets/icons/win/icon.ico",
+      "displayLanguageSelector": false,
+      "installerHeaderIcon": "src/assets/icons/win/icon.ico",
+      "include": "installer/installer.nsh"
     },
     "mac": {
       "icon": "src/assets/icons/mac/icon.icns",
