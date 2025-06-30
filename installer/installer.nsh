@@ -1,46 +1,52 @@
 ; NSISスクリプト - デスクトップアイコン作成オプション
 
-; デスクトップショートカット作成フラグ
+; グローバル変数
 Var CreateDesktopShortcut
+Var DesktopCheckbox
 
-; カスタムページを追加するためのマクロ
+; 初期化
 !macro customInit
-  ; デフォルトでデスクトップショートカットを作成する（チェック済み）
   StrCpy $CreateDesktopShortcut "1"
 !macroend
 
-; カスタムページの定義
+; カスタムページを追加
 !macro customPageAfterChangeDir
-  ; カスタムページを挿入
-  !insertmacro MUI_PAGE_CUSTOM DesktopShortcutPage DesktopShortcutPageLeave
+  Page custom DesktopShortcutPage DesktopShortcutPageLeave
 !macroend
 
-; ページ関数
+; カスタムページ関数
 Function DesktopShortcutPage
-  !insertmacro MUI_HEADER_TEXT "追加タスクの選択" "Green Sticky Notesの追加タスクを選択してください。"
-  
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
     Abort
   ${EndIf}
   
+  ; ページタイトル
+  GetDlgItem $0 $HWNDPARENT 1037
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:追加タスクの選択"
+  
+  GetDlgItem $0 $HWNDPARENT 1038
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:Green Sticky Notesの追加タスクを選択してください。"
+  
+  ; ラベル
   ${NSD_CreateLabel} 0 0 100% 20u "追加のタスクを選択してください："
   Pop $0
   
+  ; チェックボックス
   ${NSD_CreateCheckbox} 10 30u 100% 15u "&デスクトップにアイコンを作成する"
-  Pop $1
+  Pop $DesktopCheckbox
   
-  ; デフォルトでチェック済みに設定
+  ; デフォルトでチェック済み
   ${If} $CreateDesktopShortcut == "1"
-    ${NSD_SetState} $1 ${BST_CHECKED}
+    ${NSD_SetState} $DesktopCheckbox ${BST_CHECKED}
   ${EndIf}
   
   nsDialogs::Show
 FunctionEnd
 
 Function DesktopShortcutPageLeave
-  ${NSD_GetState} $1 $0
+  ${NSD_GetState} $DesktopCheckbox $0
   ${If} $0 == ${BST_CHECKED}
     StrCpy $CreateDesktopShortcut "1"
   ${Else}
@@ -48,16 +54,14 @@ Function DesktopShortcutPageLeave
   ${EndIf}
 FunctionEnd
 
-; インストール完了後の処理
+; インストール後の処理
 !macro customInstall
-  ; デスクトップショートカットを作成するかチェック
   ${If} $CreateDesktopShortcut == "1"
-    CreateShortCut "$DESKTOP\Green Sticky Notes.lnk" "$INSTDIR\Green Sticky Notes.exe" "" "$INSTDIR\Green Sticky Notes.exe" 0 SW_SHOWNORMAL "" "Green Sticky Notes"
+    CreateShortCut "$DESKTOP\Green Sticky Notes.lnk" "$INSTDIR\${PRODUCT_FILENAME}.exe" "" "$INSTDIR\${PRODUCT_FILENAME}.exe" 0 SW_SHOWNORMAL "" "${PRODUCT_NAME}"
   ${EndIf}
 !macroend
 
 ; アンインストール時の処理
 !macro customUnInstall
-  ; デスクトップショートカットを削除
   Delete "$DESKTOP\Green Sticky Notes.lnk"
 !macroend
