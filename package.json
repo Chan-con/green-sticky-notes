@@ -61,7 +61,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": true,
-      "createDesktopShortcut": "ask",
+      "createDesktopShortcut": true,
       "allowElevation": true,
       "perMachine": false,
       "shortcutName": "Green Sticky Notes",
