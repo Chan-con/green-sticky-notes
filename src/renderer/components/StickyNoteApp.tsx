@@ -22,6 +22,7 @@ export const StickyNoteApp: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const lastEscPressRef = useRef<number>(0);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -34,7 +35,29 @@ export const StickyNoteApp: React.FC = () => {
       }
     });
     
-    // クリーンアップ: タイムアウトをクリア
+    // ESC２回連続検出のキーボードイベントハンドラー
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isActive && note) {
+        const currentTime = Date.now();
+        const timeSinceLastEsc = currentTime - lastEscPressRef.current;
+        
+        if (timeSinceLastEsc <= 500) {
+          // 500ms以内の２回目のESC押下：非アクティブモードに切り替え
+          event.preventDefault();
+          setIsActive(false);
+          window.electronAPI.setNoteActive(note.id, false);
+          lastEscPressRef.current = 0; // リセット
+        } else {
+          // 初回のESC押下：タイムスタンプを記録
+          lastEscPressRef.current = currentTime;
+        }
+      }
+    };
+    
+    // キーボードイベントリスナーを追加
+    document.addEventListener('keydown', handleKeyDown);
+    
+    // クリーンアップ: タイムアウトとイベントリスナーをクリア
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
@@ -42,8 +65,9 @@ export const StickyNoteApp: React.FC = () => {
       if (blurTimeoutRef.current) {
         clearTimeout(blurTimeoutRef.current);
       }
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [isActive, note]);
 
   useEffect(() => {
     if (note) {

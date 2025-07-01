@@ -282,12 +282,18 @@ class StickyNotesApp {
     // フォールバック: 記録されたディスプレイが存在しない場合のチェック
     const { display: savedDisplay, shouldMigrate } = this.findValidDisplayForNote(note, note.isActive);
     
-    // 使用するディスプレイを決定（実際の位置を優先）
-    const currentDisplay = shouldMigrate ? actualDisplay : actualDisplay;
+    // 使用するディスプレイを決定（移行が必要な場合はプライマリディスプレイを使用）
+    const currentDisplay = shouldMigrate ? screen.getPrimaryDisplay() : actualDisplay;
     
     // 移行が必要な場合の処理
     if (shouldMigrate) {
-      console.log(`Saved display ${savedDisplayId} no longer exists, using actual display ${actualDisplayId}`);
+      console.log(`Saved display ${savedDisplayId} no longer exists, migrating to primary display`);
+      // プライマリディスプレイの安全な位置を計算
+      const primaryBounds = currentDisplay.bounds;
+      const safeMargin = 50;
+      x = primaryBounds.x + safeMargin;
+      y = primaryBounds.y + safeMargin;
+      console.log(`Migrated note ${note.id} to safe position: (${x}, ${y}) on primary display ${currentDisplay.id}`);
     } else {
       // 最小限の境界チェック（初回アクティブ化時は特に緩く）
       const bounds = currentDisplay.bounds;
@@ -352,7 +358,7 @@ class StickyNotesApp {
       y, 
       width, 
       height, 
-      displayId: actualDisplayId,
+      displayId: currentDisplay.id.toString(),
       shouldMigrate,
       displayChanged
     };
