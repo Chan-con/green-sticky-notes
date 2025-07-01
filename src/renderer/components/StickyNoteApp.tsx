@@ -23,6 +23,8 @@ export const StickyNoteApp: React.FC = () => {
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const lastEscPressRef = useRef<number>(0);
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout>();
+  const lastSaveRef = useRef<number>(0);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -57,6 +59,53 @@ export const StickyNoteApp: React.FC = () => {
     // キーボードイベントリスナーを追加
     document.addEventListener('keydown', handleKeyDown);
     
+    // 定期的な自動保存（5秒間隔）
+    const startAutoSave = () => {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+      }
+      autoSaveIntervalRef.current = setInterval(() => {
+        if (note && Date.now() - lastSaveRef.current > 4000) {
+          window.electronAPI.updateNote(note.id, { content: note.content });
+          lastSaveRef.current = Date.now();
+        }
+      }, 5000);
+    };
+
+    // 緊急保存ハンドラー
+    const emergencySave = () => {
+      if (note && saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        window.electronAPI.updateNote(note.id, { content: note.content });
+      }
+    };
+
+    // ページの可視性変更時に保存
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        emergencySave();
+      }
+    };
+
+    // ページアンロード前に保存
+    const handleBeforeUnload = () => {
+      emergencySave();
+    };
+
+    // ウィンドウフォーカス喪失時に保存
+    const handleWindowBlur = () => {
+      emergencySave();
+    };
+
+    // イベントリスナーを追加
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('blur', handleWindowBlur);
+    
+    if (note) {
+      startAutoSave();
+    }
+    
     // クリーンアップ: タイムアウトとイベントリスナーをクリア
     return () => {
       if (saveTimeoutRef.current) {
@@ -65,7 +114,13 @@ export const StickyNoteApp: React.FC = () => {
       if (blurTimeoutRef.current) {
         clearTimeout(blurTimeoutRef.current);
       }
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+      }
       document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('blur', handleWindowBlur);
     };
   }, [isActive, note]);
 
@@ -86,7 +141,8 @@ export const StickyNoteApp: React.FC = () => {
 
     saveTimeoutRef.current = setTimeout(() => {
       window.electronAPI.updateNote(note.id, { content });
-    }, 300);
+      lastSaveRef.current = Date.now();
+    }, 100);
   };
 
   const updateNoteSetting = async (updates: Partial<StickyNote>) => {

@@ -12,6 +12,15 @@ export class DataStore {
     this.dataPath = path.join(app.getPath('userData'), 'sticky-notes-data');
     this.notesFile = path.join(this.dataPath, 'notes.json');
     this.settingsFile = path.join(this.dataPath, 'settings.json');
+    
+    // デバッグ情報をログ出力
+    console.log('=== DataStore Debug Info ===');
+    console.log('App userData path:', app.getPath('userData'));
+    console.log('Data directory:', this.dataPath);
+    console.log('Notes file:', this.notesFile);
+    console.log('Settings file:', this.settingsFile);
+    console.log('============================');
+    
     this.ensureDataDirectory();
   }
 
@@ -23,18 +32,34 @@ export class DataStore {
 
   async getAllNotes(): Promise<StickyNote[]> {
     try {
+      console.log(`Loading notes from: ${this.notesFile}`);
+      
       if (!fs.existsSync(this.notesFile)) {
+        console.log('Notes file does not exist, returning empty array');
         return [];
       }
+      
+      const stats = fs.statSync(this.notesFile);
+      console.log(`Notes file size: ${stats.size} bytes`);
+      
       const data = fs.readFileSync(this.notesFile, 'utf8');
+      console.log(`Read ${data.length} characters from notes file`);
+      
       const notes = JSON.parse(data);
+      console.log(`Parsed ${notes.length} notes from file`);
       
       // 古い形式のデータを新しい形式に移行
       const migratedNotes = notes.map((note: any) => this.migrateNoteFormat(note));
+      console.log(`Migrated ${migratedNotes.length} notes`);
       
       return migratedNotes;
     } catch (error) {
       console.error('Error loading notes:', error);
+      console.error('Error details:', {
+        notesFile: this.notesFile,
+        fileExists: fs.existsSync(this.notesFile),
+        error: error instanceof Error ? error.message : error
+      });
       return [];
     }
   }
@@ -81,9 +106,46 @@ export class DataStore {
 
   async saveNotes(notes: StickyNote[]): Promise<void> {
     try {
-      fs.writeFileSync(this.notesFile, JSON.stringify(notes, null, 2));
+      await this.saveNotesAtomic(notes);
     } catch (error) {
       console.error('Error saving notes:', error);
+    }
+  }
+
+  private async saveNotesAtomic(notes: StickyNote[]): Promise<void> {
+    const tempFile = this.notesFile + '.tmp';
+    const data = JSON.stringify(notes, null, 2);
+    
+    try {
+      console.log(`Saving ${notes.length} notes to ${this.notesFile}`);
+      
+      // 一時ファイルに書き込み
+      fs.writeFileSync(tempFile, data);
+      console.log(`Temporary file written: ${tempFile}`);
+      
+      // 原子的にリネーム（書き込み完了を保証）
+      fs.renameSync(tempFile, this.notesFile);
+      console.log(`File successfully saved: ${this.notesFile}`);
+      
+      // ファイルサイズを確認
+      const stats = fs.statSync(this.notesFile);
+      console.log(`Saved file size: ${stats.size} bytes`);
+      
+    } catch (error) {
+      console.error('Error in saveNotesAtomic:', error);
+      console.error('Error details:', {
+        tempFile,
+        notesFile: this.notesFile,
+        dataLength: data.length,
+        error: error instanceof Error ? error.message : error
+      });
+      
+      // エラーが発生した場合は一時ファイルを削除
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+        console.log('Temporary file cleaned up');
+      }
+      throw error;
     }
   }
 
@@ -131,25 +193,38 @@ export class DataStore {
   }
 
   async updateNote(id: string, updates: Partial<StickyNote>): Promise<void> {
+    console.log(`=== updateNote called ===`);
+    console.log(`Note ID: ${id}`);
+    console.log(`Updates:`, updates);
+    
     const notes = await this.getAllNotes();
     const index = notes.findIndex(note => note.id === id);
     
     if (index !== -1) {
       const currentNote = notes[index];
+      console.log(`Found note at index ${index}`);
+      console.log(`Current note content length: ${typeof currentNote.content === 'string' ? currentNote.content.length : 'N/A'}`);
       
       // 数値フィールドの検証と正規化
       const validatedUpdates = this.validateNoteUpdates(updates);
+      console.log(`Validated updates:`, validatedUpdates);
       
       // 更新を適用
-      notes[index] = { 
+      const updatedNote = { 
         ...currentNote, 
         ...validatedUpdates, 
         updatedAt: Date.now() 
       };
+      notes[index] = updatedNote;
+      
+      console.log(`Updated note content length: ${typeof updatedNote.content === 'string' ? updatedNote.content.length : 'N/A'}`);
       
       await this.saveNotes(notes);
-      console.log(`Note ${id} updated with:`, validatedUpdates);
+      console.log(`Note ${id} updated successfully`);
+    } else {
+      console.warn(`Note with ID ${id} not found in ${notes.length} notes`);
     }
+    console.log(`=== updateNote finished ===`);
   }
 
   private validateNoteUpdates(updates: Partial<StickyNote>): Partial<StickyNote> {
@@ -234,9 +309,39 @@ export class DataStore {
 
   async saveSettings(settings: AppSettings): Promise<void> {
     try {
-      fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
+      await this.saveSettingsAtomic(settings);
     } catch (error) {
       console.error('Error saving settings:', error);
+    }
+  }
+
+  private async saveSettingsAtomic(settings: AppSettings): Promise<void> {
+    const tempFile = this.settingsFile + '.tmp';
+    const data = JSON.stringify(settings, null, 2);
+    
+    try {
+      // 一時ファイルに書き込み
+      fs.writeFileSync(tempFile, data);
+      
+      // 原子的にリネーム（書き込み完了を保証）
+      fs.renameSync(tempFile, this.settingsFile);
+    } catch (error) {
+      // エラーが発生した場合は一時ファイルを削除
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+      throw error;
+    }
+  }
+
+  async forceFlushAll(): Promise<void> {
+    try {
+      const notes = await this.getAllNotes();
+      await this.saveNotesAtomic(notes);
+      console.log('Emergency data flush completed successfully');
+    } catch (error) {
+      console.error('Error during emergency data flush:', error);
+      throw error;
     }
   }
 
