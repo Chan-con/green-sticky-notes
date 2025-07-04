@@ -10,6 +10,7 @@ class StickyNotesApp {
   private windowStateManager: WindowStateManager;
   private tray: Tray | null = null;
   private isQuitting = false;
+  private pendingTimers: Map<string, { moveTimeout?: NodeJS.Timeout, resizeTimeout?: NodeJS.Timeout }> = new Map();
 
   constructor() {
     this.dataStore = new DataStore();
@@ -58,10 +59,28 @@ class StickyNotesApp {
       }
     });
 
-    app.on('before-quit', (event) => {
+    app.on('before-quit', async (event) => {
       if (!this.isQuitting) {
         event.preventDefault();
-        this.hideAllWindows();
+        console.log('App is quitting, saving all pending data...');
+        
+        try {
+          await this.flushAllPendingData();
+          await this.dataStore.forceFlushAll();
+          console.log('All data saved successfully before quit');
+          
+          this.isQuitting = true;
+          this.hideAllWindows();
+          
+          // データ保存完了後に実際に終了
+          setTimeout(() => {
+            app.quit();
+          }, 100);
+        } catch (error) {
+          console.error('Error saving data before quit:', error);
+          this.isQuitting = true;
+          app.quit();
+        }
       }
     });
   }
@@ -114,18 +133,21 @@ class StickyNotesApp {
       win.webContents.send('note-data', note);
     });
 
-    // 位置更新用のデバウンス
-    let moveTimeout: NodeJS.Timeout | null = null;
+    // タイマー管理用オブジェクトを初期化
+    if (!this.pendingTimers.has(note.id)) {
+      this.pendingTimers.set(note.id, {});
+    }
     
     win.on('moved', async () => {
       const [x, y] = win.getPosition();
+      const timers = this.pendingTimers.get(note.id)!;
       
       // 頻繁な更新をデバウンス
-      if (moveTimeout) {
-        clearTimeout(moveTimeout);
+      if (timers.moveTimeout) {
+        clearTimeout(timers.moveTimeout);
       }
       
-      moveTimeout = setTimeout(async () => {
+      timers.moveTimeout = setTimeout(async () => {
         const currentNote = await this.dataStore.getNote(note.id);
         if (!currentNote) return;
         
@@ -154,33 +176,45 @@ class StickyNotesApp {
         
         // 一度に更新
         await this.dataStore.updateNote(note.id, updates);
+        
+        // タイマーをクリア
+        delete timers.moveTimeout;
       }, 100); // 100msのデバウンス
     });
 
-    // サイズ変更用のデバウンス
-    let resizeTimeout: NodeJS.Timeout | null = null;
-    
     win.on('resized', async () => {
       const [width, height] = win.getSize();
+      const timers = this.pendingTimers.get(note.id)!;
       
       // 頻繁なサイズ変更をデバウンス
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
+      if (timers.resizeTimeout) {
+        clearTimeout(timers.resizeTimeout);
       }
       
-      resizeTimeout = setTimeout(async () => {
+      timers.resizeTimeout = setTimeout(async () => {
         const currentNote = await this.dataStore.getNote(note.id);
         if (currentNote && currentNote.isActive) {
           // アクティブ時のみサイズを記録
           await this.dataStore.updateNoteSize(note.id, width, height, true);
           console.log(`Updated active size for ${note.id}: ${width}x${height}`);
         }
+        
+        // タイマーをクリア
+        delete timers.resizeTimeout;
       }, 200); // 200msのデバウンス
     });
 
     win.on('closed', () => {
       this.windows.delete(note.id);
       this.windowStateManager.unregisterWindow(note.id);
+      
+      // ペンディング中のタイマーをクリア
+      const timers = this.pendingTimers.get(note.id);
+      if (timers) {
+        if (timers.moveTimeout) clearTimeout(timers.moveTimeout);
+        if (timers.resizeTimeout) clearTimeout(timers.resizeTimeout);
+        this.pendingTimers.delete(note.id);
+      }
     });
 
     this.windows.set(note.id, win);
@@ -282,12 +316,18 @@ class StickyNotesApp {
     // フォールバック: 記録されたディスプレイが存在しない場合のチェック
     const { display: savedDisplay, shouldMigrate } = this.findValidDisplayForNote(note, note.isActive);
     
-    // 使用するディスプレイを決定（実際の位置を優先）
-    const currentDisplay = shouldMigrate ? actualDisplay : actualDisplay;
+    // 使用するディスプレイを決定（移行が必要な場合はプライマリディスプレイを使用）
+    const currentDisplay = shouldMigrate ? screen.getPrimaryDisplay() : actualDisplay;
     
     // 移行が必要な場合の処理
     if (shouldMigrate) {
-      console.log(`Saved display ${savedDisplayId} no longer exists, using actual display ${actualDisplayId}`);
+      console.log(`Saved display ${savedDisplayId} no longer exists, migrating to primary display`);
+      // プライマリディスプレイの安全な位置を計算
+      const primaryBounds = currentDisplay.bounds;
+      const safeMargin = 50;
+      x = primaryBounds.x + safeMargin;
+      y = primaryBounds.y + safeMargin;
+      console.log(`Migrated note ${note.id} to safe position: (${x}, ${y}) on primary display ${currentDisplay.id}`);
     } else {
       // 最小限の境界チェック（初回アクティブ化時は特に緩く）
       const bounds = currentDisplay.bounds;
@@ -352,7 +392,7 @@ class StickyNotesApp {
       y, 
       width, 
       height, 
-      displayId: actualDisplayId,
+      displayId: currentDisplay.id.toString(),
       shouldMigrate,
       displayChanged
     };
@@ -890,7 +930,71 @@ class StickyNotesApp {
     });
   }
 
+  private async flushAllPendingData(): Promise<void> {
+    console.log('Flushing all pending timer-based data updates...');
+    
+    const flushPromises: Promise<void>[] = [];
+    
+    for (const [noteId, timers] of this.pendingTimers.entries()) {
+      if (timers.moveTimeout) {
+        clearTimeout(timers.moveTimeout);
+        // 移動処理を即座に実行
+        flushPromises.push(this.flushMoveUpdate(noteId));
+      }
+      
+      if (timers.resizeTimeout) {
+        clearTimeout(timers.resizeTimeout);
+        // リサイズ処理を即座に実行
+        flushPromises.push(this.flushResizeUpdate(noteId));
+      }
+    }
+    
+    this.pendingTimers.clear();
+    
+    if (flushPromises.length > 0) {
+      await Promise.all(flushPromises);
+      console.log(`Flushed ${flushPromises.length} pending data updates`);
+    } else {
+      console.log('No pending data updates to flush');
+    }
+  }
 
+  private async flushMoveUpdate(noteId: string): Promise<void> {
+    const win = this.windows.get(noteId);
+    if (!win) return;
+    
+    const [x, y] = win.getPosition();
+    const currentNote = await this.dataStore.getNote(noteId);
+    if (!currentNote) return;
+    
+    const newDisplay = this.findDisplayContainingPoint(x, y);
+    const updates: Partial<StickyNote> = {};
+    
+    if (newDisplay.id.toString() !== currentNote.displayId) {
+      updates.displayId = newDisplay.id.toString();
+    }
+    
+    if (currentNote.isActive) {
+      updates.activeX = x;
+      updates.activeY = y;
+    } else {
+      updates.inactiveX = x;
+      updates.inactiveY = y;
+    }
+    
+    await this.dataStore.updateNote(noteId, updates);
+  }
+
+  private async flushResizeUpdate(noteId: string): Promise<void> {
+    const win = this.windows.get(noteId);
+    if (!win) return;
+    
+    const [width, height] = win.getSize();
+    const currentNote = await this.dataStore.getNote(noteId);
+    if (currentNote && currentNote.isActive) {
+      await this.dataStore.updateNoteSize(noteId, width, height, true);
+    }
+  }
 
 }
 
