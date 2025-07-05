@@ -50,4 +50,6 @@ export interface AppSettings {
   defaultFontSize: number;
   defaultBackgroundColor: string;
   defaultHeaderColor?: string; // デフォルトヘッダー色（オプショナル）
+  showAllHotkey?: string; // すべてのノートを表示するホットキー
+  hideAllHotkey?: string; // すべてのノートを隠すホットキー
 }

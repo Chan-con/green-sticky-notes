@@ -315,6 +315,18 @@ export class DataStore {
     }
   }
 
+  async updateSettings(updates: Partial<AppSettings>): Promise<void> {
+    try {
+      const currentSettings = await this.getSettings();
+      const updatedSettings = { ...currentSettings, ...updates };
+      await this.saveSettings(updatedSettings);
+      console.log('Settings updated successfully:', updates);
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      throw error;
+    }
+  }
+
   private async saveSettingsAtomic(settings: AppSettings): Promise<void> {
     const tempFile = this.settingsFile + '.tmp';
     const data = JSON.stringify(settings, null, 2);

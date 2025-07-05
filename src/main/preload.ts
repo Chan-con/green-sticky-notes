@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('note-data', (_, note) => callback(note));
   },
   
+  
   createNote: (nearNoteId?: string) => ipcRenderer.invoke('create-note', nearNoteId),
   updateNote: (noteId: string, updates: Partial<StickyNote>) => 
     ipcRenderer.invoke('update-note', noteId, updates),
@@ -15,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setNotePin: (noteId: string, isPinned: boolean) => 
     ipcRenderer.invoke('set-note-pin', noteId, isPinned),
   getDisplays: () => ipcRenderer.invoke('get-displays'),
+  closeSettings: () => ipcRenderer.invoke('close-settings'),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
 });
 
 contextBridge.exposeInMainWorld('electron', {

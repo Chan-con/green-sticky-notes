@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage } from 'electron';
+import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, globalShortcut } from 'electron';
 import * as path from 'path';
 import { StickyNote, DisplayInfo, AppSettings } from '../types';
 import { DataStore } from './dataStore';
@@ -11,6 +11,8 @@ class StickyNotesApp {
   private tray: Tray | null = null;
   private isQuitting = false;
   private pendingTimers: Map<string, { moveTimeout?: NodeJS.Timeout, resizeTimeout?: NodeJS.Timeout }> = new Map();
+  private settingsWindow: BrowserWindow | null = null;
+  private registeredHotkeys: Set<string> = new Set();
 
   constructor() {
     this.dataStore = new DataStore();
@@ -35,10 +37,13 @@ class StickyNotesApp {
       this.showAllWindows();
     });
 
-    app.whenReady().then(() => {
+    app.whenReady().then(async () => {
       this.createTray();
       this.createInitialNotes();
       this.setupIpcHandlers();
+      
+      // 保存済みホットキーを復元
+      await this.restoreHotkeys();
       
       // screenイベントはapp.whenReady()後に設定
       screen.on('display-added', () => this.handleDisplayChange());
@@ -67,6 +72,10 @@ class StickyNotesApp {
         try {
           await this.flushAllPendingData();
           await this.dataStore.forceFlushAll();
+          
+          // ホットキーをクリーンアップ
+          this.unregisterAllHotkeys();
+          
           console.log('All data saved successfully before quit');
           
           this.isQuitting = true;
@@ -333,27 +342,12 @@ class StickyNotesApp {
       const bounds = currentDisplay.bounds;
       const isFirstTimeActive = note.isActive && (note.activeX === 0 && note.activeY === 0);
       
-      // 詳細なデバッグ情報を出力
-      console.log(`=== Display Analysis for ${note.id} ===`);
-      console.log(`Note saved displayId: ${savedDisplayId}`);
-      console.log(`Actual display for position (${x}, ${y}): ${actualDisplayId}`);
-      console.log(`Display changed: ${displayChanged}`);
-      console.log(`Should migrate: ${shouldMigrate}`);
-      console.log(`Current display bounds:`, {
-        displayId: currentDisplay.id,
-        bounds: bounds,
-        notePosition: { x, y, width, height },
-        isActive: note.isActive,
-        isFirstTimeActive: isFirstTimeActive
-      });
       
       // 境界チェックをより寛容にする
       if (isFirstTimeActive) {
         // 初回アクティブ化時は境界チェックをスキップ
-        console.log(`Skipping boundary adjustment for first-time activation of note ${note.id}`);
       } else if (displayChanged) {
         // ディスプレイが変わった場合は最小限の調整のみ
-        console.log(`Display changed for note ${note.id}, minimal boundary adjustment only`);
         // 完全に画面外の場合のみ調整（非常に緩い条件）
         const isCompletelyOutside = 
           x + width < bounds.x || x > bounds.x + bounds.width ||
@@ -363,9 +357,6 @@ class StickyNotesApp {
           const oldX = x, oldY = y;
           x = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width - width));
           y = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height - height));
-          console.log(`Adjusted completely outside position for display change ${note.id}: (${oldX}, ${oldY}) -> (${x}, ${y})`);
-        } else {
-          console.log(`Position OK for display change ${note.id}: (${x}, ${y}) - no adjustment needed`);
         }
       } else {
         // 同じディスプレイ内での通常の境界チェック
@@ -380,9 +371,6 @@ class StickyNotesApp {
           const oldX = x, oldY = y;
           x = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width - width));
           y = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height - height));
-          console.log(`Adjusted barely visible position for note ${note.id}: (${oldX}, ${oldY}) -> (${x}, ${y})`);
-        } else {
-          console.log(`Position OK for note ${note.id}: (${x}, ${y}) within display bounds`);
         }
       }
     }
@@ -745,6 +733,37 @@ class StickyNotesApp {
         contextMenu.popup({ window: win });
       }
     });
+
+    ipcMain.handle('close-settings', () => {
+      if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+        this.settingsWindow.close();
+      }
+    });
+
+    ipcMain.handle('get-settings', async () => {
+      const settings = await this.dataStore.getSettings();
+      return {
+        showAllHotkey: settings.showAllHotkey || '',
+        hideAllHotkey: settings.hideAllHotkey || ''
+      };
+    });
+
+    ipcMain.handle('save-settings', async (_, settingsData) => {
+      try {
+        // 現在のホットキーを解除
+        this.unregisterAllHotkeys();
+        
+        // 設定を保存
+        await this.dataStore.updateSettings(settingsData);
+        
+        // 新しいホットキーを登録
+        await this.registerHotkeys(settingsData);
+        return true;
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        throw error;
+      }
+    });
   }
 
   private createTray() {
@@ -856,6 +875,11 @@ class StickyNotesApp {
       },
       { type: 'separator' },
       {
+        label: '設定',
+        click: () => this.openSettings()
+      },
+      { type: 'separator' },
+      {
         label: 'PC起動時に自動開始',
         type: 'checkbox',
         checked: isAutoStartEnabled,
@@ -913,9 +937,150 @@ class StickyNotesApp {
     });
   }
 
+
+
+
+
   private quitApp() {
     this.isQuitting = true;
     app.quit();
+  }
+
+  // ホットキー管理メソッド
+  private async restoreHotkeys() {
+    try {
+      const settings = await this.dataStore.getSettings();
+      await this.registerHotkeys(settings);
+    } catch (error) {
+      console.error('Error restoring hotkeys:', error);
+    }
+  }
+
+  private async registerHotkeys(settings: Partial<AppSettings>) {
+    try {
+      const registrationErrors: string[] = [];
+      
+      // 重複チェック
+      const hotkeys = [
+        settings.showAllHotkey?.trim(),
+        settings.hideAllHotkey?.trim()
+      ].filter(Boolean);
+      
+      const uniqueHotkeys = new Set(hotkeys);
+      if (hotkeys.length !== uniqueHotkeys.size) {
+        console.error('Hotkey conflict: Multiple hotkeys are identical');
+        registrationErrors.push('ホットキーが重複しています');
+        return;
+      }
+
+      // すべてのノートを表示するホットキー
+      if (settings.showAllHotkey && settings.showAllHotkey.trim()) {
+        const hotkey = settings.showAllHotkey.trim();
+        
+        // 既に登録されているかチェック
+        if (globalShortcut.isRegistered(hotkey)) {
+          console.warn(`Hotkey already registered by another application: ${hotkey}`);
+          registrationErrors.push(`ホットキー "${hotkey}" は他のアプリケーションによって使用されています`);
+        } else {
+          const success = globalShortcut.register(hotkey, () => {
+            this.showAllWindows();
+          });
+          
+          if (success) {
+            this.registeredHotkeys.add(hotkey);
+          } else {
+            console.error(`Failed to register show all hotkey: ${hotkey}`);
+            registrationErrors.push(`ホットキー "${hotkey}" の登録に失敗しました`);
+          }
+        }
+      }
+
+      // すべてのノートを隠すホットキー
+      if (settings.hideAllHotkey && settings.hideAllHotkey.trim()) {
+        const hotkey = settings.hideAllHotkey.trim();
+        
+        // 既に登録されているかチェック
+        if (globalShortcut.isRegistered(hotkey)) {
+          console.warn(`Hotkey already registered by another application: ${hotkey}`);
+          registrationErrors.push(`ホットキー "${hotkey}" は他のアプリケーションによって使用されています`);
+        } else {
+          const success = globalShortcut.register(hotkey, () => {
+            this.hideAllWindows();
+          });
+          
+          if (success) {
+            this.registeredHotkeys.add(hotkey);
+          } else {
+            console.error(`Failed to register hide all hotkey: ${hotkey}`);
+            registrationErrors.push(`ホットキー "${hotkey}" の登録に失敗しました`);
+          }
+        }
+      }
+
+
+      // エラーがあった場合の処理
+      if (registrationErrors.length > 0) {
+        console.error('Hotkey registration errors:', registrationErrors);
+        // 必要に応じて、ユーザーに通知する仕組みを追加可能
+      }
+    } catch (error) {
+      console.error('Error registering hotkeys:', error);
+    }
+  }
+
+  private unregisterAllHotkeys() {
+    try {
+      for (const hotkey of this.registeredHotkeys) {
+        globalShortcut.unregister(hotkey);
+      }
+      this.registeredHotkeys.clear();
+      
+      // 念のため、すべてのショートカットを解除
+      globalShortcut.unregisterAll();
+    } catch (error) {
+      console.error('Error unregistering hotkeys:', error);
+    }
+  }
+
+
+  private openSettings() {
+    
+    // 既に設定ウィンドウが開いている場合は前面に表示
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.focus();
+      return;
+    }
+
+    this.settingsWindow = new BrowserWindow({
+      width: 450,
+      height: 300,
+      resizable: false,
+      frame: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+      },
+      show: false,
+    });
+
+    // 設定ウィンドウが閉じられた時の処理
+    this.settingsWindow.on('closed', () => {
+      console.log('Settings window closed');
+      this.settingsWindow = null;
+    });
+
+    // 設定ウィンドウの内容を読み込み
+    if (process.env.NODE_ENV === 'development') {
+      this.settingsWindow.loadURL('http://localhost:3000?settings=true');
+    } else {
+      this.settingsWindow.loadFile(path.join(__dirname, 'index.html'), { query: { settings: 'true' } });
+    }
+
+    this.settingsWindow.once('ready-to-show', () => {
+      console.log('Settings window ready, showing...');
+      this.settingsWindow?.show();
+    });
   }
 
   private async getAutoStartStatus(): Promise<boolean> {

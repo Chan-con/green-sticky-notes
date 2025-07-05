@@ -13,6 +13,9 @@ declare global {
       setNoteActive: (noteId: string, isActive: boolean) => Promise<void>;
       setNotePin: (noteId: string, isPinned: boolean) => Promise<void>;
       getDisplays: () => Promise<any[]>;
+      closeSettings: () => Promise<void>;
+      getSettings: () => Promise<any>;
+      saveSettings: (settings: any) => Promise<boolean>;
     };
   }
 }
@@ -36,6 +39,7 @@ export const StickyNoteApp: React.FC = () => {
         setIsActive(noteData.isActive);
       }
     });
+    
     
     // ESC２回連続検出のキーボードイベントハンドラー
     const handleKeyDown = (event: KeyboardEvent) => {
