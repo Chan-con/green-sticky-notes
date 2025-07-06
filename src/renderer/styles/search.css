@@ -1,0 +1,361 @@
+/* 検索ウィンドウのメインスタイル */
+.search-window {
+  width: 100%;
+  height: 100vh;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  user-select: none;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  color: #2D4A2D;
+}
+
+/* ヘッダー部分 */
+.search-header {
+  background: #CCFFE6;
+  color: #2D4A2D;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: move;
+  border-bottom: 1px solid #C0DCC0;
+  -webkit-app-region: drag;
+}
+
+.search-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #2D4A2D;
+}
+
+/* 検索入力部分 */
+.search-input-container {
+  padding: 20px;
+  background: white;
+  border-bottom: 1px solid #C0DCC0;
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #C0DCC0;
+  border-radius: 4px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+  background: white;
+  color: #2D4A2D;
+}
+
+.search-input:focus {
+  border-color: #99FFCC;
+}
+
+.search-spinner {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  animation: spin 1s linear infinite;
+  color: #2D4A2D;
+}
+
+@keyframes spin {
+  from { transform: translateY(-50%) rotate(0deg); }
+  to { transform: translateY(-50%) rotate(360deg); }
+}
+
+/* 検索オプション */
+.search-options {
+  padding: 15px 20px;
+  background: white;
+  border-bottom: 1px solid #C0DCC0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.option-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #2D4A2D;
+  font-weight: 500;
+}
+
+.option-checkbox input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.results-count {
+  font-size: 14px;
+  color: #2D4A2D;
+  font-weight: 500;
+}
+
+/* 検索結果コンテナ */
+.search-results-container {
+  flex: 1;
+  overflow-y: auto;
+  background: white;
+}
+
+/* カスタムスクロールバー */
+.search-results-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.search-results-container::-webkit-scrollbar-track {
+  background: #f5f5f5;
+}
+
+.search-results-container::-webkit-scrollbar-thumb {
+  background: #C0DCC0;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.search-results-container::-webkit-scrollbar-thumb:hover {
+  background: #99FFCC;
+}
+
+/* 検索結果リスト */
+.results-header {
+  padding: 15px 20px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #C0DCC0;
+}
+
+.results-list {
+  padding: 15px;
+}
+
+/* 検索結果アイテム */
+.search-result-item {
+  padding: 15px;
+  margin-bottom: 8px;
+  border: 1px solid #C0DCC0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+  position: relative;
+}
+
+.search-result-item:hover {
+  border-color: #99FFCC;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.search-result-item.selected {
+  border-color: #99FFCC;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  background: #f8fff9;
+}
+
+.search-result-item.selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #99FFCC;
+  border-radius: 0 2px 2px 0;
+}
+
+.result-header {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.note-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.note-color-badge {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid #C0DCC0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 検索結果コンテンツ */
+.result-content {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.result-text {
+  font-size: 14px;
+  color: #2D4A2D;
+  line-height: 1.6;
+}
+
+.search-highlight {
+  background: #E6FFEB;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+  color: #2D4A2D;
+}
+
+/* 結果なし・プレースホルダー */
+.no-results,
+.search-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: #2D4A2D;
+  min-height: 200px;
+}
+
+.no-results-icon,
+.placeholder-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  opacity: 0.7;
+}
+
+.no-results-text,
+.placeholder-text {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #2D4A2D;
+}
+
+.no-results-suggestion {
+  font-size: 14px;
+  color: #2D4A2D;
+}
+
+.placeholder-tips {
+  margin-top: 15px;
+  text-align: left;
+  max-width: 300px;
+}
+
+.placeholder-tips div {
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #2D4A2D;
+}
+
+.placeholder-tips ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.placeholder-tips li {
+  padding: 4px 0;
+  font-size: 14px;
+  color: #2D4A2D;
+}
+
+.placeholder-tips li:before {
+  content: "• ";
+  color: #99FFCC;
+  font-weight: bold;
+  margin-right: 4px;
+}
+
+/* 読み込み中 */
+.search-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  min-height: 200px;
+  color: #2D4A2D;
+}
+
+.loading-spinner {
+  font-size: 32px;
+  margin-bottom: 12px;
+  animation: spin 1s linear infinite;
+}
+
+/* フッター */
+.search-footer {
+  padding: 15px 20px;
+  background: #CCFFE6;
+  border-top: 1px solid #C0DCC0;
+}
+
+.shortcuts-help {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #2D4A2D;
+  justify-content: center;
+}
+
+.shortcuts-help span {
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #C0DCC0;
+  border-radius: 4px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.shortcuts-help span:hover {
+  background: #f5f5f5;
+  border-color: #99FFCC;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 500px) {
+  .search-window {
+    border-radius: 0;
+  }
+  
+  .search-input {
+    font-size: 16px; /* iOS でのズーム防止 */
+  }
+  
+  .search-options {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  
+  .shortcuts-help {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* アクセシビリティ */
+.search-result-item:focus {
+  outline: 2px solid #99FFCC;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

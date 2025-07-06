@@ -1,8 +1,9 @@
 import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, globalShortcut } from 'electron';
 import * as path from 'path';
-import { StickyNote, DisplayInfo, AppSettings } from '../types';
+import { StickyNote, DisplayInfo, AppSettings, SearchQuery } from '../types';
 import { DataStore } from './dataStore';
 import { WindowStateManager } from './windowStateManager';
+import { SearchService } from './searchService';
 
 class StickyNotesApp {
   private windows: Map<string, BrowserWindow> = new Map();
@@ -12,11 +13,15 @@ class StickyNotesApp {
   private isQuitting = false;
   private pendingTimers: Map<string, { moveTimeout?: NodeJS.Timeout, resizeTimeout?: NodeJS.Timeout }> = new Map();
   private settingsWindow: BrowserWindow | null = null;
+  private searchWindow: BrowserWindow | null = null;
   private registeredHotkeys: Set<string> = new Set();
+  private searchService: SearchService;
+  private isSettingsWindowOpen: boolean = false;
 
   constructor() {
     this.dataStore = new DataStore();
     this.windowStateManager = new WindowStateManager();
+    this.searchService = new SearchService();
     this.setupEventHandlers();
   }
 
@@ -26,14 +31,12 @@ class StickyNotesApp {
     
     if (!gotTheLock) {
       // 既に起動中の場合は終了
-      console.log('Another instance is already running. Exiting...');
       app.quit();
       return;
     }
     
     // 2つ目のインスタンスが起動しようとした場合の処理
     app.on('second-instance', () => {
-      console.log('Second instance detected, showing existing windows');
       this.showAllWindows();
     });
 
@@ -41,6 +44,9 @@ class StickyNotesApp {
       this.createTray();
       this.createInitialNotes();
       this.setupIpcHandlers();
+      
+      // 検索サービスを初期化
+      await this.initializeSearchService();
       
       // 保存済みホットキーを復元
       await this.restoreHotkeys();
@@ -67,16 +73,12 @@ class StickyNotesApp {
     app.on('before-quit', async (event) => {
       if (!this.isQuitting) {
         event.preventDefault();
-        console.log('App is quitting, saving all pending data...');
-        
         try {
           await this.flushAllPendingData();
           await this.dataStore.forceFlushAll();
           
           // ホットキーをクリーンアップ
           this.unregisterAllHotkeys();
-          
-          console.log('All data saved successfully before quit');
           
           this.isQuitting = true;
           this.hideAllWindows();
@@ -166,9 +168,6 @@ class StickyNotesApp {
         
         // ディスプレイが変更された場合
         if (newDisplay.id.toString() !== currentNote.displayId) {
-          console.log(`=== Move Event Display Change ===`);
-          console.log(`Note ${note.id} moved to display ${newDisplay.id} from ${currentNote.displayId}`);
-          console.log(`Position: (${x}, ${y}), State: ${currentNote.isActive ? 'active' : 'inactive'}`);
           updates.displayId = newDisplay.id.toString();
         }
         
@@ -176,11 +175,9 @@ class StickyNotesApp {
         if (currentNote.isActive) {
           updates.activeX = x;
           updates.activeY = y;
-          console.log(`Updated active position for ${note.id}: (${x}, ${y}) on display ${newDisplay.id}`);
         } else {
           updates.inactiveX = x;
           updates.inactiveY = y;
-          console.log(`Updated inactive position for ${note.id}: (${x}, ${y}) on display ${newDisplay.id}`);
         }
         
         // 一度に更新
@@ -205,7 +202,6 @@ class StickyNotesApp {
         if (currentNote && currentNote.isActive) {
           // アクティブ時のみサイズを記録
           await this.dataStore.updateNoteSize(note.id, width, height, true);
-          console.log(`Updated active size for ${note.id}: ${width}x${height}`);
         }
         
         // タイマーをクリア
@@ -237,20 +233,15 @@ class StickyNotesApp {
   private findDisplayContainingPoint(x: number, y: number) {
     const displays = screen.getAllDisplays();
     
-    console.log(`Finding display for point (${x}, ${y}) among ${displays.length} displays`);
-    
     for (const display of displays) {
       const bounds = display.bounds;
-      console.log(`Checking display ${display.id}: bounds ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`);
       if (x >= bounds.x && x < bounds.x + bounds.width &&
           y >= bounds.y && y < bounds.y + bounds.height) {
-        console.log(`Point (${x}, ${y}) found in display ${display.id}`);
         return display;
       }
     }
     
     // どのディスプレイにも見つからない場合はプライマリディスプレイを返す
-    console.log(`Point (${x}, ${y}) not found in any display, using primary`);
     return screen.getPrimaryDisplay();
   }
 
@@ -269,7 +260,6 @@ class StickyNotesApp {
     }
     
     // ディスプレイがない場合はプライマリディスプレイに移動
-    console.log(`Display ${targetDisplayId} not found for note ${note.id}. Migrating to primary display.`);
     return { display: screen.getPrimaryDisplay(), shouldMigrate: true };
   }
 
@@ -286,10 +276,8 @@ class StickyNotesApp {
         // すでにアクティブ位置が設定されている場合はそのまま使用
         x = note.activeX;
         y = note.activeY;
-        console.log(`Using saved active position for note ${note.id}: (${x}, ${y})`);
       } else {
         // 初回アクティブ化の場合は現在位置をそのまま維持（境界チェックも最小限に）
-        console.log(`First-time activation for note ${note.id}, staying at current position`);
         x = currentWindowX !== undefined ? currentWindowX : (note.inactiveX || 100);
         y = currentWindowY !== undefined ? currentWindowY : (note.inactiveY || 100);
       }
@@ -311,16 +299,11 @@ class StickyNotesApp {
 
     // 実際の位置からディスプレイを検出（より正確な方法）
     const actualDisplay = this.findDisplayContainingPoint(x, y);
-    console.log(`Actual display for position (${x}, ${y}): ${actualDisplay.id}`);
     
     // 記録されたdisplayIdと実際のディスプレイの比較
     const savedDisplayId = note.displayId;
     const actualDisplayId = actualDisplay.id.toString();
     const displayChanged = savedDisplayId !== actualDisplayId;
-    
-    if (displayChanged) {
-      console.log(`Display changed for note ${note.id}: ${savedDisplayId} -> ${actualDisplayId}`);
-    }
     
     // フォールバック: 記録されたディスプレイが存在しない場合のチェック
     const { display: savedDisplay, shouldMigrate } = this.findValidDisplayForNote(note, note.isActive);
@@ -330,13 +313,11 @@ class StickyNotesApp {
     
     // 移行が必要な場合の処理
     if (shouldMigrate) {
-      console.log(`Saved display ${savedDisplayId} no longer exists, migrating to primary display`);
       // プライマリディスプレイの安全な位置を計算
       const primaryBounds = currentDisplay.bounds;
       const safeMargin = 50;
       x = primaryBounds.x + safeMargin;
       y = primaryBounds.y + safeMargin;
-      console.log(`Migrated note ${note.id} to safe position: (${x}, ${y}) on primary display ${currentDisplay.id}`);
     } else {
       // 最小限の境界チェック（初回アクティブ化時は特に緩く）
       const bounds = currentDisplay.bounds;
@@ -391,8 +372,6 @@ class StickyNotesApp {
     const displays = screen.getAllDisplays();
     const primaryDisplay = screen.getPrimaryDisplay();
     
-    console.log('Display configuration changed. Checking note positions...');
-    
     // 各ウィンドウの処理を並列実行
     const migrationPromises = Array.from(this.windows.entries()).map(async ([noteId, win]) => {
       const note = await this.dataStore.getNote(noteId);
@@ -401,8 +380,6 @@ class StickyNotesApp {
       const noteDisplay = displays.find(d => d.id.toString() === note.displayId);
       
       if (!noteDisplay) {
-        console.log(`Display ${note.displayId} no longer available for note ${noteId}. Migrating to primary display.`);
-        
         // プライマリディスプレイの安全な位置を計算
         const safeMargin = 50;
         const newX = primaryDisplay.bounds.x + safeMargin;
@@ -425,8 +402,6 @@ class StickyNotesApp {
         }
         
         await this.dataStore.updateNote(noteId, updates);
-        
-        console.log(`Note ${noteId} migrated to primary display at position (${newX}, ${newY})`);
       } else {
         // ディスプレイが存在する場合は、境界チェックを実行
         const [currentX, currentY] = win.getPosition();
@@ -453,15 +428,12 @@ class StickyNotesApp {
           }
           
           await this.dataStore.updateNote(noteId, updates);
-          
-          console.log(`Note ${noteId} position adjusted to stay within display bounds: (${adjustedX}, ${adjustedY})`);
         }
       }
     });
     
     // すべての移行処理を並列実行
     await Promise.all(migrationPromises);
-    console.log('Display change handling completed.');
   }
 
   private setupIpcHandlers() {
@@ -483,7 +455,6 @@ class StickyNotesApp {
           const [parentX, parentY] = parentWindow.getPosition();
           const [parentWidth, parentHeight] = parentWindow.getSize();
           
-          console.log(`Positioning new note at parent location: (${parentX}, ${parentY})`);
           
           // 画面境界チェック
           const display = screen.getAllDisplays().find(d => d.id.toString() === newNote.displayId) || screen.getPrimaryDisplay();
@@ -526,7 +497,6 @@ class StickyNotesApp {
           const parentWindow = this.windows.get(nearNoteId);
           if (parentWindow) {
             newWindow.moveTop();
-            console.log(`New note window moved to top above parent`);
           }
         }
       }
@@ -536,6 +506,13 @@ class StickyNotesApp {
 
     ipcMain.handle('update-note', async (_, noteId: string, updates: Partial<StickyNote>) => {
       await this.dataStore.updateNote(noteId, updates);
+      
+      // 検索インデックスを更新
+      const updatedNote = await this.dataStore.getNote(noteId);
+      if (updatedNote) {
+        this.searchService.updateNoteInIndex(updatedNote);
+      }
+      
       return true;
     });
 
@@ -544,12 +521,15 @@ class StickyNotesApp {
       if (win) {
         win.close();
       }
+      
+      // 検索インデックスから削除
+      this.searchService.removeNoteFromIndex(noteId);
+      
       await this.dataStore.deleteNote(noteId);
       
       // 削除後、残りの付箋数をチェック
       const remainingNotes = await this.dataStore.getAllNotes();
       if (remainingNotes.length === 0) {
-        console.log('Last note deleted, creating new note at top-left');
         // 左上に新規付箋を作成
         const display = screen.getPrimaryDisplay();
         const newNote = await this.dataStore.createNote();
@@ -577,7 +557,6 @@ class StickyNotesApp {
     });
 
     ipcMain.handle('set-note-active', async (_, noteId: string, isActive: boolean) => {
-      console.log(`Setting note ${noteId} active: ${isActive}`);
       const win = this.windows.get(noteId);
       if (!win) return;
 
@@ -586,7 +565,6 @@ class StickyNotesApp {
 
       // 状態変更が許可されているかチェック
       if (!this.windowStateManager.requestStateChange(noteId, isActive)) {
-        console.log(`State change rejected for note ${noteId}`);
         return;
       }
 
@@ -594,8 +572,6 @@ class StickyNotesApp {
       const [currentX, currentY] = win.getPosition();
       const [currentWidth, currentHeight] = win.getSize();
       
-      console.log(`Current window bounds: x=${currentX}, y=${currentY}, width=${currentWidth}, height=${currentHeight}`);
-      console.log(`Switching note ${noteId} from ${note.isActive ? 'active' : 'inactive'} to ${isActive ? 'active' : 'inactive'}`);
       
       // 状態変更を原子的に実行
       const updates: Partial<StickyNote> = { isActive };
@@ -607,12 +583,10 @@ class StickyNotesApp {
         updates.activeY = currentY;
         updates.activeWidth = currentWidth;
         updates.activeHeight = currentHeight;
-        console.log(`Saving active bounds: x=${currentX}, y=${currentY}, width=${currentWidth}, height=${currentHeight}`);
       } else if (!note.isActive && isActive) {
         // 非アクティブ→アクティブ: 非アクティブ状態の位置を保存
         updates.inactiveX = currentX;
         updates.inactiveY = currentY;
-        console.log(`Saving inactive position: x=${currentX}, y=${currentY}`);
       }
 
       // 一度の更新で状態変更を実行
@@ -622,8 +596,6 @@ class StickyNotesApp {
       const updatedNote = await this.dataStore.getNote(noteId);
       if (updatedNote) {
         const bounds = await this.calculateNoteBounds(updatedNote, currentX, currentY);
-        
-        console.log(`New bounds:`, bounds);
         
         // ディスプレイ変更の処理
         const migrationUpdates: Partial<StickyNote> = {};
@@ -638,18 +610,15 @@ class StickyNotesApp {
             migrationUpdates.inactiveX = bounds.x;
             migrationUpdates.inactiveY = bounds.y;
           }
-          console.log(`Migrating note ${noteId} to display ${bounds.displayId} with position (${bounds.x}, ${bounds.y})`);
           await this.dataStore.updateNote(noteId, migrationUpdates);
         } else if (bounds.displayChanged) {
           // 実際の位置に基づくディスプレイ変更（自然な移動）
           migrationUpdates.displayId = bounds.displayId;
-          console.log(`Natural display change for note ${noteId}: ${updatedNote.displayId} -> ${bounds.displayId}`);
           await this.dataStore.updateNote(noteId, migrationUpdates);
         }
         
         // 初回アクティブ化時は現在位置をアクティブ位置として保存
         if (isActive && (note.activeX === 0 && note.activeY === 0)) {
-          console.log(`Saving initial active position for note ${noteId}: (${currentX}, ${currentY})`);
           await this.dataStore.updateNote(noteId, {
             activeX: currentX,
             activeY: currentY,
@@ -737,6 +706,10 @@ class StickyNotesApp {
     ipcMain.handle('close-settings', () => {
       if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
         this.settingsWindow.close();
+        this.isSettingsWindowOpen = false;
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Settings window closed via IPC, hotkeys enabled');
+        }
       }
     });
 
@@ -744,7 +717,8 @@ class StickyNotesApp {
       const settings = await this.dataStore.getSettings();
       return {
         showAllHotkey: settings.showAllHotkey || '',
-        hideAllHotkey: settings.hideAllHotkey || ''
+        hideAllHotkey: settings.hideAllHotkey || '',
+        searchHotkey: settings.searchHotkey || ''
       };
     });
 
@@ -757,21 +731,64 @@ class StickyNotesApp {
         await this.dataStore.updateSettings(settingsData);
         
         // 新しいホットキーを登録
-        await this.registerHotkeys(settingsData);
-        return true;
+        const registrationResult = await this.registerHotkeys(settingsData);
+        
+        if (registrationResult && registrationResult.length > 0) {
+          // ホットキー登録エラーがある場合
+          return { 
+            success: false, 
+            error: registrationResult.join('\n') 
+          };
+        }
+        
+        return { success: true };
       } catch (error) {
         console.error('Error saving settings:', error);
-        throw error;
+        return { 
+          success: false, 
+          error: '設定の保存中にエラーが発生しました' 
+        };
       }
     });
+
+    // 検索関連のIPCハンドラー
+    ipcMain.handle('search-notes', async (_, query: SearchQuery) => {
+      try {
+        const notes = await this.dataStore.getAllNotes();
+        const results = this.searchService.search(query, notes);
+        return results;
+      } catch (error) {
+        console.error('Error searching notes:', error);
+        return [];
+      }
+    });
+
+    ipcMain.handle('open-note-by-id', async (_, noteId: string) => {
+      try {
+        const window = this.windows.get(noteId);
+        if (window) {
+          window.show();
+          window.focus();
+          // アクティブ状態にする
+          await this.handleSetNoteActive(noteId, true);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('Error opening note:', error);
+        return false;
+      }
+    });
+
+    ipcMain.handle('close-search', () => {
+      if (this.searchWindow && !this.searchWindow.isDestroyed()) {
+        this.searchWindow.close();
+      }
+    });
+
   }
 
   private createTray() {
-    console.log('Starting tray creation...');
-    console.log('Platform:', process.platform);
-    console.log('NODE_ENV:', process.env.NODE_ENV);
-    console.log('__dirname:', __dirname);
-    console.log('process.resourcesPath:', process.resourcesPath);
     
     try {
       // 複数のアイコンパスを試す
@@ -794,17 +811,14 @@ class StickyNotesApp {
         );
       }
 
-      console.log('Trying icon paths:', possiblePaths);
       
       const fs = require('fs');
       let trayIconPath = null;
       
       // 存在するパスを見つける
       for (const iconPath of possiblePaths) {
-        console.log('Checking path:', iconPath);
         if (fs.existsSync(iconPath)) {
           trayIconPath = iconPath;
-          console.log('Found icon at:', iconPath);
           break;
         }
       }
@@ -815,35 +829,23 @@ class StickyNotesApp {
         const { nativeImage } = require('electron');
         const emptyIcon = nativeImage.createEmpty();
         this.tray = new Tray(emptyIcon);
-        console.log('Created tray with empty icon');
       } else {
         this.tray = new Tray(trayIconPath);
-        console.log('Created tray with icon:', trayIconPath);
       }
 
       this.tray.setToolTip('Green Sticky Notes');
       
       // トレイアイコンがクリックされた時の処理
       this.tray.on('click', () => {
-        console.log('Tray clicked');
         this.showAllWindows();
       });
       
       // 右クリック時のコンテキストメニュー
       this.tray.on('right-click', () => {
-        console.log('Tray right-clicked');
         this.tray?.popUpContextMenu();
       });
       
       this.updateTrayMenu();
-      console.log('Tray setup completed');
-      
-      // トレイが正常に作成されたか確認
-      if (this.tray && !this.tray.isDestroyed()) {
-        console.log('Tray is active and visible');
-      } else {
-        console.error('Tray creation failed or tray was destroyed');
-      }
       
     } catch (error) {
       console.error('Failed to create tray:', error);
@@ -874,6 +876,10 @@ class StickyNotesApp {
         click: () => this.hideAllWindows()
       },
       { type: 'separator' },
+      {
+        label: '検索',
+        click: () => this.toggleSearch()
+      },
       {
         label: '設定',
         click: () => this.openSettings()
@@ -916,8 +922,6 @@ class StickyNotesApp {
         const newWindow = await this.createNoteWindow(finalNote);
         newWindow.show();
         newWindow.focus();
-        
-        console.log(`New note created from tray: ${newNote.id}`);
       }
     } catch (error) {
       console.error('Failed to create note from tray:', error);
@@ -956,21 +960,24 @@ class StickyNotesApp {
     }
   }
 
-  private async registerHotkeys(settings: Partial<AppSettings>) {
+  private async registerHotkeys(settings: Partial<AppSettings>): Promise<string[]> {
     try {
       const registrationErrors: string[] = [];
       
       // 重複チェック
       const hotkeys = [
         settings.showAllHotkey?.trim(),
-        settings.hideAllHotkey?.trim()
+        settings.hideAllHotkey?.trim(),
+        settings.searchHotkey?.trim()
       ].filter(Boolean);
       
       const uniqueHotkeys = new Set(hotkeys);
       if (hotkeys.length !== uniqueHotkeys.size) {
-        console.error('Hotkey conflict: Multiple hotkeys are identical');
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Hotkey conflict: Multiple hotkeys are identical', hotkeys);
+        }
         registrationErrors.push('ホットキーが重複しています');
-        return;
+        return registrationErrors;
       }
 
       // すべてのノートを表示するホットキー
@@ -983,7 +990,12 @@ class StickyNotesApp {
           registrationErrors.push(`ホットキー "${hotkey}" は他のアプリケーションによって使用されています`);
         } else {
           const success = globalShortcut.register(hotkey, () => {
-            this.showAllWindows();
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`Show all hotkey pressed. Settings window open: ${this.isSettingsWindowOpen}`);
+            }
+            if (!this.isSettingsWindowOpen) {
+              this.showAllWindows();
+            }
           });
           
           if (success) {
@@ -1005,7 +1017,12 @@ class StickyNotesApp {
           registrationErrors.push(`ホットキー "${hotkey}" は他のアプリケーションによって使用されています`);
         } else {
           const success = globalShortcut.register(hotkey, () => {
-            this.hideAllWindows();
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`Hide all hotkey pressed. Settings window open: ${this.isSettingsWindowOpen}`);
+            }
+            if (!this.isSettingsWindowOpen) {
+              this.hideAllWindows();
+            }
           });
           
           if (success) {
@@ -1017,14 +1034,52 @@ class StickyNotesApp {
         }
       }
 
+      // 検索ウィンドウを開くホットキー
+      if (settings.searchHotkey && settings.searchHotkey.trim()) {
+        const hotkey = settings.searchHotkey.trim();
+        
+        // 既に登録されているかチェック
+        if (globalShortcut.isRegistered(hotkey)) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`Search hotkey already registered by another application: ${hotkey}`);
+          }
+          registrationErrors.push(`検索ホットキー "${hotkey}" は他のアプリケーションによって使用されています。別のキーを選択してください。`);
+        } else {
+          const success = globalShortcut.register(hotkey, () => {
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`Search hotkey pressed. Settings window open: ${this.isSettingsWindowOpen}`);
+            }
+            if (!this.isSettingsWindowOpen) {
+              this.toggleSearch();
+            }
+          });
+          
+          if (success) {
+            this.registeredHotkeys.add(hotkey);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`Search hotkey registered successfully: ${hotkey}`);
+            }
+          } else {
+            console.error(`Failed to register search hotkey: ${hotkey}`);
+            registrationErrors.push(`ホットキー "${hotkey}" の登録に失敗しました`);
+          }
+        }
+      }
+
 
       // エラーがあった場合の処理
       if (registrationErrors.length > 0) {
-        console.error('Hotkey registration errors:', registrationErrors);
-        // 必要に応じて、ユーザーに通知する仕組みを追加可能
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Hotkey registration errors:', registrationErrors);
+        }
+        // ホットキー登録に失敗してもアプリは正常に動作する
+        // 設定画面で使用できないホットキーについてユーザーに通知される
       }
+      
+      return registrationErrors;
     } catch (error) {
       console.error('Error registering hotkeys:', error);
+      return ['ホットキーの登録中にエラーが発生しました'];
     }
   }
 
@@ -1042,6 +1097,107 @@ class StickyNotesApp {
     }
   }
 
+  private async initializeSearchService() {
+    try {
+      const notes = await this.dataStore.getAllNotes();
+      await this.searchService.initialize(notes);
+    } catch (error) {
+      console.error('Failed to initialize search service:', error);
+    }
+  }
+
+  private async handleSetNoteActive(noteId: string, isActive: boolean) {
+    const win = this.windows.get(noteId);
+    if (!win) return;
+
+    const note = await this.dataStore.getNote(noteId);
+    if (!note) return;
+
+    // 状態変更が許可されているかチェック
+    if (!this.windowStateManager.requestStateChange(noteId, isActive)) {
+      return;
+    }
+
+    await this.dataStore.updateNote(noteId, { isActive });
+    this.windowStateManager.completeStateChange(noteId, isActive);
+    
+    // ウィンドウサイズとリサイズ設定を更新
+    const updatedNote = await this.dataStore.getNote(noteId);
+    if (updatedNote) {
+      const bounds = await this.calculateNoteBounds(updatedNote);
+      win.setBounds({
+        x: Math.round(bounds.x),
+        y: Math.round(bounds.y),
+        width: Math.round(bounds.width),
+        height: Math.round(bounds.height)
+      });
+      win.setResizable(isActive);
+      
+      if (isActive) {
+        win.focus();
+      }
+    }
+  }
+
+  private toggleSearch() {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('toggleSearch() called');
+    }
+    // 既に検索ウィンドウが開いている場合は閉じる
+    if (this.searchWindow && !this.searchWindow.isDestroyed()) {
+      this.searchWindow.close();
+      return;
+    }
+
+    this.openSearch();
+  }
+
+  private openSearch() {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('openSearch() called');
+    }
+    // 既に検索ウィンドウが開いている場合は前面に表示
+    if (this.searchWindow && !this.searchWindow.isDestroyed()) {
+      this.searchWindow.focus();
+      return;
+    }
+
+    this.searchWindow = new BrowserWindow({
+      width: 600,
+      height: 500,
+      resizable: false,
+      frame: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+      },
+      show: false,
+    });
+
+    // 検索ウィンドウが閉じられた時の処理
+    this.searchWindow.on('closed', () => {
+      this.searchWindow = null;
+    });
+
+    // 検索ウィンドウの内容を読み込み
+    if (process.env.NODE_ENV === 'development') {
+      this.searchWindow.loadURL('http://localhost:3000?search=true');
+    } else {
+      this.searchWindow.loadFile(path.join(__dirname, 'index.html'), { query: { search: 'true' } });
+    }
+
+    this.searchWindow.once('ready-to-show', () => {
+      this.searchWindow?.show();
+      this.searchWindow?.focus();
+    });
+  }
+
+  private closeSearch() {
+    if (this.searchWindow && !this.searchWindow.isDestroyed()) {
+      this.searchWindow.close();
+    }
+  }
 
   private openSettings() {
     
@@ -1066,8 +1222,11 @@ class StickyNotesApp {
 
     // 設定ウィンドウが閉じられた時の処理
     this.settingsWindow.on('closed', () => {
-      console.log('Settings window closed');
       this.settingsWindow = null;
+      this.isSettingsWindowOpen = false;
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Settings window closed, hotkeys enabled');
+      }
     });
 
     // 設定ウィンドウの内容を読み込み
@@ -1078,8 +1237,11 @@ class StickyNotesApp {
     }
 
     this.settingsWindow.once('ready-to-show', () => {
-      console.log('Settings window ready, showing...');
       this.settingsWindow?.show();
+      this.isSettingsWindowOpen = true;
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Settings window opened, hotkeys disabled');
+      }
     });
   }
 
@@ -1096,8 +1258,6 @@ class StickyNotesApp {
   }
 
   private async flushAllPendingData(): Promise<void> {
-    console.log('Flushing all pending timer-based data updates...');
-    
     const flushPromises: Promise<void>[] = [];
     
     for (const [noteId, timers] of this.pendingTimers.entries()) {
@@ -1118,9 +1278,6 @@ class StickyNotesApp {
     
     if (flushPromises.length > 0) {
       await Promise.all(flushPromises);
-      console.log(`Flushed ${flushPromises.length} pending data updates`);
-    } else {
-      console.log('No pending data updates to flush');
     }
   }
 

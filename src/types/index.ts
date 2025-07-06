@@ -52,4 +52,33 @@ export interface AppSettings {
   defaultHeaderColor?: string; // デフォルトヘッダー色（オプショナル）
   showAllHotkey?: string; // すべてのノートを表示するホットキー
   hideAllHotkey?: string; // すべてのノートを隠すホットキー
+  searchHotkey?: string; // 検索ウィンドウの表示/非表示を切り替えるホットキー
+}
+
+// 検索関連の型定義
+export interface SearchIndex {
+  noteId: string;
+  searchText: string; // 検索用の正規化されたテキスト
+  previewText: string; // 表示用のプレビューテキスト（最初の100文字程度）
+  updatedAt: number;
+  createdAt: number;
+}
+
+export interface SearchHighlight {
+  start: number;
+  end: number;
+}
+
+export interface SearchResult {
+  note: StickyNote;
+  relevance: number; // 関連度スコア（0-1）
+  highlights: SearchHighlight[]; // ハイライト位置
+  matchCount: number; // マッチした回数
+}
+
+export interface SearchQuery {
+  text: string;
+  keywords: string[]; // スペースで分割されたキーワード
+  caseSensitive?: boolean;
+  maxResults?: number;
 }

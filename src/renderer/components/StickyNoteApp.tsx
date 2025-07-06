@@ -3,22 +3,6 @@ import { StickyNote, RichContent } from '../../types';
 import { NoteHeader } from './NoteHeader';
 import { NoteContent } from './NoteContent';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      onNoteData: (callback: (note: StickyNote) => void) => void;
-      createNote: (nearNoteId?: string) => Promise<StickyNote>;
-      updateNote: (noteId: string, updates: Partial<StickyNote>) => Promise<boolean>;
-      deleteNote: (noteId: string) => Promise<boolean>;
-      setNoteActive: (noteId: string, isActive: boolean) => Promise<void>;
-      setNotePin: (noteId: string, isPinned: boolean) => Promise<void>;
-      getDisplays: () => Promise<any[]>;
-      closeSettings: () => Promise<void>;
-      getSettings: () => Promise<any>;
-      saveSettings: (settings: any) => Promise<boolean>;
-    };
-  }
-}
 
 export const StickyNoteApp: React.FC = () => {
   const [note, setNote] = useState<StickyNote | null>(null);

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { StickyNote } from '../types';
+import { StickyNote, SearchQuery } from '../types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   onNoteData: (callback: (note: StickyNote) => void) => {
@@ -19,6 +19,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeSettings: () => ipcRenderer.invoke('close-settings'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
+  
+  // 検索関連のメソッド
+  searchNotes: (query: SearchQuery) => ipcRenderer.invoke('search-notes', query),
+  openNoteById: (noteId: string) => ipcRenderer.invoke('open-note-by-id', noteId),
+  closeSearch: () => ipcRenderer.invoke('close-search'),
 });
 
 contextBridge.exposeInMainWorld('electron', {

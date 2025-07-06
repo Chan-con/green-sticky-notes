@@ -36,20 +36,26 @@ export class WindowStateManager {
   requestStateChange(windowId: string, newState: boolean): boolean {
     const state = this.windowStates.get(windowId);
     if (!state) {
-      console.warn(`Window ${windowId} not registered in state manager`);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`Window ${windowId} not registered in state manager`);
+      }
       return false;
     }
 
     // 連続した状態変更を防ぐ
     const timeSinceLastChange = Date.now() - state.lastStateChange;
     if (state.isTransitioning || timeSinceLastChange < this.TRANSITION_COOLDOWN) {
-      console.log(`State change blocked for window ${windowId} - cooldown active`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`State change blocked for window ${windowId} - cooldown active`);
+      }
       return false;
     }
 
     // 同じ状態への変更を防ぐ
     if (state.isActive === newState) {
-      console.log(`State change blocked for window ${windowId} - already in target state`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`State change blocked for window ${windowId} - already in target state`);
+      }
       return false;
     }
 
@@ -100,10 +106,12 @@ export class WindowStateManager {
    * デバッグ用: すべての状態を表示
    */
   debugPrintStates(): void {
-    console.log('=== Window States ===');
-    this.windowStates.forEach((state, id) => {
-      console.log(`${id}: active=${state.isActive}, transitioning=${state.isTransitioning}, lastChange=${new Date(state.lastStateChange).toISOString()}`);
-    });
-    console.log('===================');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== Window States ===');
+      this.windowStates.forEach((state, id) => {
+        console.log(`${id}: active=${state.isActive}, transitioning=${state.isTransitioning}, lastChange=${new Date(state.lastStateChange).toISOString()}`);
+      });
+      console.log('===================');
+    }
   }
 }
