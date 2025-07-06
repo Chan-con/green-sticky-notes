@@ -14,6 +14,7 @@ class StickyNotesApp {
   private pendingTimers: Map<string, { moveTimeout?: NodeJS.Timeout, resizeTimeout?: NodeJS.Timeout }> = new Map();
   private settingsWindow: BrowserWindow | null = null;
   private searchWindow: BrowserWindow | null = null;
+  private consoleWindow: BrowserWindow | null = null;
   private registeredHotkeys: Set<string> = new Set();
   private searchService: SearchService;
   private isSettingsWindowOpen: boolean = false;
@@ -129,6 +130,7 @@ class StickyNotesApp {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
+        devTools: true, // コンソールボタンから開発者ツールを開けるように有効化
       },
     });
 
@@ -142,6 +144,16 @@ class StickyNotesApp {
 
     win.webContents.once('did-finish-load', () => {
       win.webContents.send('note-data', note);
+    });
+
+    // 開発者ツールのショートカットキーをブロック
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+        event.preventDefault();
+      }
+      if (input.key === 'F12') {
+        event.preventDefault();
+      }
     });
 
     // タイマー管理用オブジェクトを初期化
@@ -715,10 +727,13 @@ class StickyNotesApp {
 
     ipcMain.handle('get-settings', async () => {
       const settings = await this.dataStore.getSettings();
+      const autoStartStatus = await this.getAutoStartStatus();
       return {
         showAllHotkey: settings.showAllHotkey || '',
         hideAllHotkey: settings.hideAllHotkey || '',
-        searchHotkey: settings.searchHotkey || ''
+        searchHotkey: settings.searchHotkey || '',
+        headerIconSize: settings.headerIconSize || 16,
+        autoStart: autoStartStatus
       };
     });
 
@@ -726,6 +741,11 @@ class StickyNotesApp {
       try {
         // 現在のホットキーを解除
         this.unregisterAllHotkeys();
+        
+        // 自動開始設定を適用
+        if (settingsData.autoStart !== undefined) {
+          await this.setAutoStart(settingsData.autoStart);
+        }
         
         // 設定を保存
         await this.dataStore.updateSettings(settingsData);
@@ -741,6 +761,9 @@ class StickyNotesApp {
           };
         }
         
+        // 既存の全ての付箋ウィンドウに設定変更を通知
+        this.notifySettingsChange();
+        
         return { success: true };
       } catch (error) {
         console.error('Error saving settings:', error);
@@ -749,6 +772,10 @@ class StickyNotesApp {
           error: '設定の保存中にエラーが発生しました' 
         };
       }
+    });
+
+    ipcMain.handle('send-settings-preview', (_, previewSettings) => {
+      this.notifySettingsPreview(previewSettings);
     });
 
     // 検索関連のIPCハンドラー
@@ -784,6 +811,10 @@ class StickyNotesApp {
       if (this.searchWindow && !this.searchWindow.isDestroyed()) {
         this.searchWindow.close();
       }
+    });
+
+    ipcMain.handle('open-console', () => {
+      this.openConsole();
     });
 
   }
@@ -858,7 +889,6 @@ class StickyNotesApp {
   private async updateTrayMenu() {
     if (!this.tray) return;
 
-    const isAutoStartEnabled = await this.getAutoStartStatus();
     const settings = await this.dataStore.getSettings();
     
     const contextMenu = Menu.buildFromTemplate([
@@ -880,19 +910,10 @@ class StickyNotesApp {
         label: '検索',
         click: () => this.toggleSearch()
       },
+      { type: 'separator' },
       {
         label: '設定',
         click: () => this.openSettings()
-      },
-      { type: 'separator' },
-      {
-        label: 'PC起動時に自動開始',
-        type: 'checkbox',
-        checked: isAutoStartEnabled,
-        click: async () => {
-          await this.toggleAutoStart();
-          this.updateTrayMenu(); // メニューを更新
-        }
       },
       { type: 'separator' },
       {
@@ -1171,6 +1192,7 @@ class StickyNotesApp {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
+        devTools: false, // 開発者ツールを無効化
       },
       show: false,
     });
@@ -1178,6 +1200,16 @@ class StickyNotesApp {
     // 検索ウィンドウが閉じられた時の処理
     this.searchWindow.on('closed', () => {
       this.searchWindow = null;
+    });
+
+    // 開発者ツールのショートカットキーをブロック（検索ウィンドウ）
+    this.searchWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+        event.preventDefault();
+      }
+      if (input.key === 'F12') {
+        event.preventDefault();
+      }
     });
 
     // 検索ウィンドウの内容を読み込み
@@ -1199,6 +1231,24 @@ class StickyNotesApp {
     }
   }
 
+  private notifySettingsChange() {
+    // 全ての付箋ウィンドウに設定変更を通知
+    for (const [noteId, window] of this.windows) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('settings-changed');
+      }
+    }
+  }
+
+  private notifySettingsPreview(previewSettings: any) {
+    // 全ての付箋ウィンドウにプレビュー設定を送信
+    for (const [noteId, window] of this.windows) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('settings-preview', previewSettings);
+      }
+    }
+  }
+
   private openSettings() {
     
     // 既に設定ウィンドウが開いている場合は前面に表示
@@ -1216,6 +1266,7 @@ class StickyNotesApp {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
+        devTools: true, // コンソールボタンから開発者ツールを開けるように有効化
       },
       show: false,
     });
@@ -1226,6 +1277,16 @@ class StickyNotesApp {
       this.isSettingsWindowOpen = false;
       if (process.env.NODE_ENV === 'development') {
         console.log('Settings window closed, hotkeys enabled');
+      }
+    });
+
+    // 開発者ツールのショートカットキーをブロック（設定ウィンドウ）
+    this.settingsWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+        event.preventDefault();
+      }
+      if (input.key === 'F12') {
+        event.preventDefault();
       }
     });
 
@@ -1247,6 +1308,13 @@ class StickyNotesApp {
 
   private async getAutoStartStatus(): Promise<boolean> {
     return app.getLoginItemSettings().openAtLogin;
+  }
+
+  private async setAutoStart(enabled: boolean) {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: true
+    });
   }
 
   private async toggleAutoStart() {
@@ -1316,6 +1384,58 @@ class StickyNotesApp {
     if (currentNote && currentNote.isActive) {
       await this.dataStore.updateNoteSize(noteId, width, height, true);
     }
+  }
+
+  private openConsole() {
+    // 既存の付箋ウィンドウがある場合、そのウィンドウの開発者ツールを開く
+    const firstWindow = Array.from(this.windows.values())[0];
+    if (firstWindow && !firstWindow.isDestroyed()) {
+      firstWindow.webContents.openDevTools({ mode: 'detach' });
+      return;
+    }
+
+    // 付箋ウィンドウがない場合は設定ウィンドウの開発者ツールを開く
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      // 設定ウィンドウのdevToolsを一時的に有効にして開く
+      this.settingsWindow.webContents.openDevTools({ mode: 'detach' });
+      return;
+    }
+
+    // どのウィンドウもない場合は新しいコンソールウィンドウを作成
+    if (this.consoleWindow && !this.consoleWindow.isDestroyed()) {
+      this.consoleWindow.focus();
+      return;
+    }
+
+    this.consoleWindow = new BrowserWindow({
+      width: 800,
+      height: 600,
+      resizable: true,
+      frame: true,
+      title: 'Green Sticky Notes - Console',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        devTools: true,
+      },
+      show: false,
+    });
+
+    // コンソールウィンドウが閉じられた時の処理
+    this.consoleWindow.on('closed', () => {
+      this.consoleWindow = null;
+    });
+
+    // 開発者ツールを開く
+    this.consoleWindow.webContents.openDevTools({ mode: 'detach' });
+
+    // 空のページを読み込み
+    this.consoleWindow.loadURL('data:text/html,<html><body><h1>Green Sticky Notes Console</h1><p>開発者ツールでメインプロセスのログを確認できます。</p></body></html>');
+
+    this.consoleWindow.once('ready-to-show', () => {
+      this.consoleWindow?.show();
+      this.consoleWindow?.focus();
+    });
   }
 
 }

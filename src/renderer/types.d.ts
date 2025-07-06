@@ -7,6 +7,9 @@ declare global {
     };
     electronAPI: {
       onNoteData: (callback: (note: StickyNote) => void) => void;
+      onSettingsChanged: (callback: () => void) => void;
+      onSettingsPreview: (callback: (settings: any) => void) => void;
+      sendSettingsPreview: (settings: any) => Promise<void>;
       createNote: (nearNoteId?: string) => Promise<StickyNote>;
       updateNote: (noteId: string, updates: Partial<StickyNote>) => Promise<boolean>;
       deleteNote: (noteId: string) => Promise<boolean>;
@@ -21,6 +24,9 @@ declare global {
       searchNotes: (query: SearchQuery) => Promise<SearchResult[]>;
       openNoteById: (noteId: string) => Promise<boolean>;
       closeSearch: () => void;
+      
+      // コンソール関連のメソッド
+      openConsole: () => Promise<void>;
     };
   }
 }

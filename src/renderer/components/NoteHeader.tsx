@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StickyNote } from '../../types';
 
 interface NoteHeaderProps {
   note: StickyNote;
   isActive: boolean;
+  headerIconSize: number;
   onUpdateNote: (updates: Partial<StickyNote>) => Promise<void>;
   onCreateNote: () => Promise<void>;
   onTogglePin: () => Promise<void>;
@@ -135,11 +136,14 @@ const generateHeaderColor = (bodyColor: string): string => {
 export const NoteHeader: React.FC<NoteHeaderProps> = ({
   note,
   isActive,
+  headerIconSize,
   onUpdateNote,
   onCreateNote,
   onTogglePin,
   onToggleLock
 }) => {
+  // デバッグログ
+  console.log('[DEBUG] NoteHeader render - note ID:', note.id, 'isActive:', isActive, 'headerIconSize:', headerIconSize);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontSizePicker, setShowFontSizePicker] = useState(false);
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 });
@@ -160,6 +164,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
       closeAllPopups();
     }
   }, [isActive]);
+
 
   // ポップアップ外クリックで閉じる
   useEffect(() => {
@@ -273,13 +278,26 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
     setShowFontSizePicker(false);
   };
 
+  // スタイルをuseMemoで管理して確実に再計算されるようにする
+  const headerStyle = useMemo(() => ({
+    ...(note.headerColor ? { backgroundColor: note.headerColor } : {}),
+    padding: `${Math.max(4, headerIconSize * 0.3)}px ${Math.max(8, headerIconSize * 0.6)}px`
+  }), [note.headerColor, headerIconSize]);
+  
+  const iconStyle = useMemo(() => ({
+    fontSize: `${headerIconSize}px`,
+    width: `${headerIconSize + 8}px`,
+    height: `${headerIconSize + 8}px`
+  }), [headerIconSize]);
+
   if (!isActive) {
-    const headerStyle = note.headerColor ? { backgroundColor: note.headerColor } : {};
+    
     return (
       <div className="note-header" style={headerStyle} onClick={(e) => e.stopPropagation()}>
         <div className="header-menu">
           <button
             className="menu-button"
+            style={iconStyle}
             title="新規付箋追加"
             onMouseDown={(e) => handleButtonClick(e, onCreateNote)}
           >
@@ -288,6 +306,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           
           <button
             className="menu-button"
+            style={iconStyle}
             title="ピン留"
             onMouseDown={(e) => handleButtonClick(e, onTogglePin)}
           >
@@ -322,14 +341,13 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
     setShowFontSizePicker(false);
   };
 
-  const headerStyle = note.headerColor ? { backgroundColor: note.headerColor } : {};
-  
   return (
     <>
       <div className="note-header" style={headerStyle} onClick={(e) => e.stopPropagation()}>
         <div className="header-menu">
           <button
             className="menu-button"
+            style={iconStyle}
             title="新規付箋追加"
             onMouseDown={(e) => handleButtonClick(e, onCreateNote)}
           >
@@ -339,6 +357,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           <button
             ref={fontButtonRef}
             className="menu-button"
+            style={iconStyle}
             title="文字サイズ"
             onMouseDown={(e) => handleButtonClick(e, () => {
               closeAllPopups();
@@ -356,6 +375,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           <button
             ref={colorButtonRef}
             className="menu-button"
+            style={iconStyle}
             title="カラーピッカー"
             onMouseDown={(e) => handleButtonClick(e, () => {
               closeAllPopups();
@@ -372,6 +392,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           
           <button
             className="menu-button"
+            style={iconStyle}
             title="ピン留"
             onMouseDown={(e) => handleButtonClick(e, onTogglePin)}
           >
@@ -380,6 +401,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           
           <button
             className="menu-button"
+            style={iconStyle}
             title={note.isLocked ? "アクティブロック解除" : "アクティブロック"}
             onMouseDown={(e) => handleButtonClick(e, onToggleLock)}
           >

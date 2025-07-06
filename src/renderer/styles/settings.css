@@ -41,6 +41,13 @@
   margin-bottom: 15px;
 }
 
+.setting-row {
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
 .hotkey-setting {
   margin-bottom: 15px;
   display: flex;
@@ -48,6 +55,7 @@
   gap: 15px;
 }
 
+.setting-row label,
 .hotkey-setting label {
   min-width: 150px;
   color: #2D4A2D;
@@ -134,4 +142,111 @@
 
 .settings-actions button:hover {
   background: #99FFCC;
+}
+
+/* サイズスライダー */
+.size-input-group {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.size-slider {
+  flex: 1;
+  height: 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  outline: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #CCFFE6;
+  border: 2px solid #2D4A2D;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.size-slider::-webkit-slider-thumb:hover {
+  background: #99FFCC;
+  transform: scale(1.1);
+}
+
+.size-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #CCFFE6;
+  border: 2px solid #2D4A2D;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.size-slider::-moz-range-thumb:hover {
+  background: #99FFCC;
+  transform: scale(1.1);
+}
+
+.size-value {
+  min-width: 40px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #2D4A2D;
+  text-align: center;
+}
+
+/* デバッグセクション */
+.debug-section {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #C0DCC0;
+  display: flex;
+  justify-content: center;
+}
+
+.console-button {
+  padding: 8px 16px;
+  border: 1px solid #C0DCC0;
+  border-radius: 4px;
+  background: white;
+  color: #2D4A2D;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  -webkit-app-region: no-drag;
+}
+
+.console-button:hover {
+  background: #f5f5f5;
+  border-color: #99FFCC;
+}
+
+/* 自動開始チェックボックス */
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.auto-start-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #CCFFE6;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.checkbox-label {
+  color: #2D4A2D;
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StickyNote, RichContent } from '../../types';
+import { StickyNote, RichContent, AppSettings } from '../../types';
 import { NoteHeader } from './NoteHeader';
 import { NoteContent } from './NoteContent';
 
@@ -7,6 +7,8 @@ import { NoteContent } from './NoteContent';
 export const StickyNoteApp: React.FC = () => {
   const [note, setNote] = useState<StickyNote | null>(null);
   const [isActive, setIsActive] = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [renderKey, setRenderKey] = useState(0);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const lastEscPressRef = useRef<number>(0);
@@ -17,12 +19,62 @@ export const StickyNoteApp: React.FC = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const noteId = urlParams.get('noteId');
     
+    // 設定を読み込み
+    const loadSettings = async () => {
+      try {
+        const savedSettings = await window.electronAPI.getSettings();
+        setSettings(savedSettings);
+      } catch (error) {
+        console.error('設定の読み込みに失敗しました:', error);
+        // デフォルト設定
+        setSettings({
+          defaultFontSize: 14,
+          defaultBackgroundColor: '#CCFFE6',
+          headerIconSize: 16,
+          showAllHotkey: '',
+          hideAllHotkey: '',
+          searchHotkey: '',
+          autoStart: false
+        });
+      }
+    };
+    
+    loadSettings();
+    
     window.electronAPI.onNoteData((noteData) => {
       if (!noteId || noteData.id === noteId) {
         setNote(noteData);
         setIsActive(noteData.isActive);
       }
     });
+
+    // 設定変更イベントをリッスン
+    const handleSettingsChanged = () => {
+      console.log('[DEBUG] Settings changed event received, note ID:', noteId, 'isActive:', isActive);
+      // 保存が確実に完了するまで少し待ってから設定を読み込み
+      setTimeout(() => {
+        loadSettings();
+        // 強制的に再レンダリングをトリガー
+        setRenderKey(prev => prev + 1);
+      }, 200);
+    };
+
+    // 一時的な設定変更プレビューをリッスン
+    const handleSettingsPreview = (previewSettings: AppSettings) => {
+      console.log('[DEBUG] Settings preview received, note ID:', noteId, 'isActive:', isActive, 'headerIconSize:', previewSettings.headerIconSize);
+      setSettings(previewSettings);
+      // 強制的に再レンダリングをトリガー
+      setRenderKey(prev => prev + 1);
+      
+    };
+
+    if (window.electronAPI.onSettingsChanged) {
+      window.electronAPI.onSettingsChanged(handleSettingsChanged);
+    }
+
+    if (window.electronAPI.onSettingsPreview) {
+      window.electronAPI.onSettingsPreview(handleSettingsPreview);
+    }
     
     
     // ESC２回連続検出のキーボードイベントハンドラー
@@ -221,13 +273,21 @@ export const StickyNoteApp: React.FC = () => {
       onClick={!isActive ? handleNoteClick : undefined}
     >
       <NoteHeader
+        key={`header-${renderKey}-${isActive ? 'active' : 'inactive'}-${settings?.headerIconSize ?? 16}`}
         note={note}
         isActive={isActive}
+        headerIconSize={settings?.headerIconSize ?? 16}
         onUpdateNote={updateNoteSetting}
         onCreateNote={createNewNote}
         onTogglePin={togglePin}
         onToggleLock={toggleLock}
       />
+      {/* デバッグ情報 */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{fontSize: '10px', color: 'red', position: 'absolute', top: '0', right: '0', background: 'white', padding: '2px'}}>
+          RenderKey: {renderKey}, IconSize: {settings?.headerIconSize ?? 16}
+        </div>
+      )}
       
       <NoteContent
         note={note}

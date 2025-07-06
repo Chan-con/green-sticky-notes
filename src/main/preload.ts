@@ -6,6 +6,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('note-data', (_, note) => callback(note));
   },
   
+  onSettingsChanged: (callback: () => void) => {
+    ipcRenderer.on('settings-changed', () => callback());
+  },
+  
+  onSettingsPreview: (callback: (settings: any) => void) => {
+    ipcRenderer.on('settings-preview', (_, settings) => callback(settings));
+  },
+  
+  sendSettingsPreview: (settings: any) => ipcRenderer.invoke('send-settings-preview', settings),
+  
   
   createNote: (nearNoteId?: string) => ipcRenderer.invoke('create-note', nearNoteId),
   updateNote: (noteId: string, updates: Partial<StickyNote>) => 
@@ -24,6 +34,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchNotes: (query: SearchQuery) => ipcRenderer.invoke('search-notes', query),
   openNoteById: (noteId: string) => ipcRenderer.invoke('open-note-by-id', noteId),
   closeSearch: () => ipcRenderer.invoke('close-search'),
+  
+  // コンソール関連のメソッド
+  openConsole: () => ipcRenderer.invoke('open-console'),
 });
 
 contextBridge.exposeInMainWorld('electron', {

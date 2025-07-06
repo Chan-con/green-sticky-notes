@@ -50,9 +50,11 @@ export interface AppSettings {
   defaultFontSize: number;
   defaultBackgroundColor: string;
   defaultHeaderColor?: string; // デフォルトヘッダー色（オプショナル）
+  headerIconSize: number; // ヘッダーアイコンのサイズ（12-32px）
   showAllHotkey?: string; // すべてのノートを表示するホットキー
   hideAllHotkey?: string; // すべてのノートを隠すホットキー
   searchHotkey?: string; // 検索ウィンドウの表示/非表示を切り替えるホットキー
+  autoStart?: boolean; // PC起動時の自動開始設定
 }
 
 // 検索関連の型定義
