@@ -6,6 +6,8 @@ interface SettingsState {
   hideAllHotkey: string;
   searchHotkey: string;
   headerIconSize: number;
+  defaultInactiveWidth: number;
+  defaultInactiveHeight: number;
   autoStart: boolean;
 }
 
@@ -15,6 +17,8 @@ export const SettingsApp: React.FC = () => {
     hideAllHotkey: '',
     searchHotkey: '',
     headerIconSize: 16,
+    defaultInactiveWidth: 100,  // 仮の初期値
+    defaultInactiveHeight: 100, // 仮の初期値
     autoStart: false
   });
   
@@ -23,6 +27,8 @@ export const SettingsApp: React.FC = () => {
     hideAllHotkey: '',
     searchHotkey: '',
     headerIconSize: 16,
+    defaultInactiveWidth: 100,  // 仮の初期値
+    defaultInactiveHeight: 100, // 仮の初期値
     autoStart: false
   });
   
@@ -30,6 +36,7 @@ export const SettingsApp: React.FC = () => {
   const [pressedKeys, setPressedKeys] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isClosingSafely, setIsClosingSafely] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const timeoutRef = useRef<NodeJS.Timeout>();
   const isClosingSafelyRef = useRef(false);
   const originalSettingsRef = useRef<SettingsState>(originalSettings);
@@ -40,8 +47,30 @@ export const SettingsApp: React.FC = () => {
       try {
         if (window.electronAPI && window.electronAPI.getSettings) {
           const savedSettings = await window.electronAPI.getSettings();
-          setSettings(savedSettings);
-          setOriginalSettings(savedSettings);
+          console.log('[DEBUG] Loaded settings from electron:', savedSettings);
+          
+          // デフォルト値をマージして欠損したフィールドを補完
+          console.log('[DEBUG] savedSettings.defaultInactiveWidth:', savedSettings.defaultInactiveWidth);
+          console.log('[DEBUG] savedSettings.defaultInactiveHeight:', savedSettings.defaultInactiveHeight);
+          console.log('[DEBUG] Type of defaultInactiveWidth:', typeof savedSettings.defaultInactiveWidth);
+          console.log('[DEBUG] Type of defaultInactiveHeight:', typeof savedSettings.defaultInactiveHeight);
+          console.log('[DEBUG] Is defaultInactiveWidth undefined?:', savedSettings.defaultInactiveWidth === undefined);
+          console.log('[DEBUG] Is defaultInactiveHeight undefined?:', savedSettings.defaultInactiveHeight === undefined);
+          
+          const completeSettings = {
+            showAllHotkey: savedSettings.showAllHotkey ?? '',
+            hideAllHotkey: savedSettings.hideAllHotkey ?? '',
+            searchHotkey: savedSettings.searchHotkey ?? '',
+            headerIconSize: savedSettings.headerIconSize ?? 16,
+            defaultInactiveWidth: savedSettings.defaultInactiveWidth !== undefined ? savedSettings.defaultInactiveWidth : 150,
+            defaultInactiveHeight: savedSettings.defaultInactiveHeight !== undefined ? savedSettings.defaultInactiveHeight : 125,
+            autoStart: savedSettings.autoStart ?? false
+          };
+          
+          console.log('[DEBUG] Complete settings after merge:', completeSettings);
+          setSettings(completeSettings);
+          setOriginalSettings(completeSettings);
+          setIsLoading(false);
         }
       } catch (error) {
         console.error('設定の読み込みに失敗しました:', error);
@@ -51,10 +80,13 @@ export const SettingsApp: React.FC = () => {
           hideAllHotkey: '',
           searchHotkey: '',
           headerIconSize: 16,
+          defaultInactiveWidth: 150,  // 新しい範囲の中間値
+          defaultInactiveHeight: 125, // 新しい範囲の中間値
           autoStart: false
         };
         setSettings(defaultSettings);
         setOriginalSettings(defaultSettings);
+        setIsLoading(false);
       }
     };
     
@@ -196,8 +228,11 @@ export const SettingsApp: React.FC = () => {
 
   // プレビュー用の設定変更を送信
   const sendPreview = (newSettings: SettingsState) => {
+    console.log('[DEBUG] sendPreview called with:', newSettings);
     if (window.electronAPI && window.electronAPI.sendSettingsPreview) {
       window.electronAPI.sendSettingsPreview(newSettings);
+    } else {
+      console.log('[DEBUG] electronAPI.sendSettingsPreview not available');
     }
   };
 
@@ -208,12 +243,27 @@ export const SettingsApp: React.FC = () => {
     sendPreview(newSettings);
   };
 
+  // 非アクティブサイズ変更時のハンドラ
+  const handleInactiveSizeChange = (dimension: 'width' | 'height', value: number) => {
+    console.log('[DEBUG] handleInactiveSizeChange called:', dimension, value);
+    const newSettings = { 
+      ...settings, 
+      [dimension === 'width' ? 'defaultInactiveWidth' : 'defaultInactiveHeight']: value 
+    };
+    console.log('[DEBUG] New settings:', newSettings);
+    setSettings(newSettings);
+    sendPreview(newSettings);
+  };
+
   const handleSave = async () => {
     try {
       setErrorMessage(''); // エラーメッセージをクリア
+      console.log('[DEBUG] handleSave called with settings:', settings);
       
       if (window.electronAPI && window.electronAPI.saveSettings) {
         const result: any = await window.electronAPI.saveSettings(settings);
+        console.log('[DEBUG] Save result:', result);
+        
         if (result && typeof result === 'object' && result.success) {
           // 保存成功時に元の設定を更新とフラグ設定
           setOriginalSettings(settings);
@@ -223,6 +273,8 @@ export const SettingsApp: React.FC = () => {
           originalSettingsRef.current = settings;
           isClosingSafelyRef.current = true;
           
+          console.log('[DEBUG] Settings saved successfully, closing window');
+          
           // 少し待ってから設定ウィンドウを閉じる（イベントの競合を避けるため）
           setTimeout(async () => {
             if (window.electronAPI && window.electronAPI.closeSettings) {
@@ -231,6 +283,7 @@ export const SettingsApp: React.FC = () => {
           }, 300);
         } else if (result && typeof result === 'object' && !result.success) {
           // エラーメッセージを表示
+          console.log('[DEBUG] Save failed:', result.error);
           setErrorMessage(result.error || '設定の保存に失敗しました');
         } else {
           // 古い形式（boolean）の場合
@@ -240,6 +293,8 @@ export const SettingsApp: React.FC = () => {
           // refも即座に更新（確実に最新の値を反映）
           originalSettingsRef.current = settings;
           isClosingSafelyRef.current = true;
+          
+          console.log('[DEBUG] Settings saved (legacy format), closing window');
           
           // 少し待ってから設定ウィンドウを閉じる（イベントの競合を避けるため）
           setTimeout(async () => {
@@ -276,7 +331,15 @@ export const SettingsApp: React.FC = () => {
                 onChange={(e) => handleHeaderIconSizeChange(parseInt(e.target.value))}
                 className="size-slider"
               />
-              <span className="size-value">{settings.headerIconSize}px</span>
+              <input
+                type="number"
+                min="12"
+                max="32"
+                value={settings.headerIconSize}
+                onChange={(e) => handleHeaderIconSizeChange(parseInt(e.target.value) || 16)}
+                className="size-input"
+              />
+              <span className="size-unit">px</span>
             </div>
           </div>
         </div>
@@ -356,6 +419,58 @@ export const SettingsApp: React.FC = () => {
         </div>
 
         <div className="settings-section">
+          <h3>サイズ設定</h3>
+          
+          <div className="setting-row">
+            <label htmlFor="defaultInactiveWidth">非アクティブモードの幅:</label>
+            <div className="size-input-group">
+              <input
+                type="range"
+                id="defaultInactiveWidth"
+                min="50"
+                max="300"
+                value={settings.defaultInactiveWidth}
+                onChange={(e) => handleInactiveSizeChange('width', parseInt(e.target.value))}
+                className="size-slider"
+              />
+              <input
+                type="number"
+                min="50"
+                max="300"
+                value={settings.defaultInactiveWidth}
+                onChange={(e) => handleInactiveSizeChange('width', parseInt(e.target.value) || 150)}
+                className="size-input"
+              />
+              <span className="size-unit">px</span>
+            </div>
+          </div>
+          
+          <div className="setting-row">
+            <label htmlFor="defaultInactiveHeight">非アクティブモードの高さ:</label>
+            <div className="size-input-group">
+              <input
+                type="range"
+                id="defaultInactiveHeight"
+                min="50"
+                max="200"
+                value={settings.defaultInactiveHeight}
+                onChange={(e) => handleInactiveSizeChange('height', parseInt(e.target.value))}
+                className="size-slider"
+              />
+              <input
+                type="number"
+                min="50"
+                max="200"
+                value={settings.defaultInactiveHeight}
+                onChange={(e) => handleInactiveSizeChange('height', parseInt(e.target.value) || 125)}
+                className="size-input"
+              />
+              <span className="size-unit">px</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="settings-section">
           <h3>システム設定</h3>
           
           <div className="setting-row">
@@ -389,19 +504,6 @@ export const SettingsApp: React.FC = () => {
         
         <div className="settings-actions">
           <button onClick={handleSave}>保存</button>
-        </div>
-        
-        <div className="debug-section">
-          <button 
-            onClick={() => {
-              if (window.electronAPI && window.electronAPI.openConsole) {
-                window.electronAPI.openConsole();
-              }
-            }}
-            className="console-button"
-          >
-            🖥️ コンソールログを開く
-          </button>
         </div>
       </div>
     </div>

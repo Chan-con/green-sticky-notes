@@ -51,6 +51,8 @@ export interface AppSettings {
   defaultBackgroundColor: string;
   defaultHeaderColor?: string; // デフォルトヘッダー色（オプショナル）
   headerIconSize: number; // ヘッダーアイコンのサイズ（12-32px）
+  defaultInactiveWidth: number; // 非アクティブモードのデフォルト幅（100-500px）
+  defaultInactiveHeight: number; // 非アクティブモードのデフォルト高さ（100-500px）
   showAllHotkey?: string; // すべてのノートを表示するホットキー
   hideAllHotkey?: string; // すべてのノートを隠すホットキー
   searchHotkey?: string; // 検索ウィンドウの表示/非表示を切り替えるホットキー

@@ -299,15 +299,25 @@ class StickyNotesApp {
       // 非アクティブ状態は記録された位置を正確に復元
       x = note.inactiveX || 100;
       y = note.inactiveY || 100;
-      width = note.inactiveWidth || 150;
-      height = note.inactiveHeight || 100;
+      // 設定からデフォルトサイズを取得
+      const settings = await this.dataStore.getSettings();
+      width = note.inactiveWidth || settings.defaultInactiveWidth || 150;
+      height = note.inactiveHeight || settings.defaultInactiveHeight || 100;
     }
 
     // 数値型を確実にする
     x = Number(x) || 100;
     y = Number(y) || 100;
-    width = Number(width) || (note.isActive ? 300 : 150);
-    height = Number(height) || (note.isActive ? 200 : 100);
+    if (note.isActive) {
+      width = Number(width) || 300;
+      height = Number(height) || 200;
+    } else {
+      const settings = await this.dataStore.getSettings();
+      // 非アクティブモードでは設定のデフォルトサイズを優先
+      width = Number(width) || settings.defaultInactiveWidth || 150;
+      height = Number(height) || settings.defaultInactiveHeight || 100;
+      console.log('[DEBUG] calculateNoteBounds - inactive mode, settings:', settings.defaultInactiveWidth, 'x', settings.defaultInactiveHeight, 'final:', width, 'x', height);
+    }
 
     // 実際の位置からディスプレイを検出（より正確な方法）
     const actualDisplay = this.findDisplayContainingPoint(x, y);
@@ -728,17 +738,24 @@ class StickyNotesApp {
     ipcMain.handle('get-settings', async () => {
       const settings = await this.dataStore.getSettings();
       const autoStartStatus = await this.getAutoStartStatus();
-      return {
+      console.log('[DEBUG] get-settings IPC handler - settings from dataStore:', settings);
+      const result = {
         showAllHotkey: settings.showAllHotkey || '',
         hideAllHotkey: settings.hideAllHotkey || '',
         searchHotkey: settings.searchHotkey || '',
         headerIconSize: settings.headerIconSize || 16,
+        defaultInactiveWidth: settings.defaultInactiveWidth || 150,
+        defaultInactiveHeight: settings.defaultInactiveHeight || 125,
         autoStart: autoStartStatus
       };
+      console.log('[DEBUG] get-settings IPC handler - returning:', result);
+      return result;
     });
 
     ipcMain.handle('save-settings', async (_, settingsData) => {
       try {
+        console.log('[DEBUG] save-settings called with:', settingsData);
+        
         // 現在のホットキーを解除
         this.unregisterAllHotkeys();
         
@@ -749,12 +766,14 @@ class StickyNotesApp {
         
         // 設定を保存
         await this.dataStore.updateSettings(settingsData);
+        console.log('[DEBUG] Settings saved successfully');
         
         // 新しいホットキーを登録
         const registrationResult = await this.registerHotkeys(settingsData);
         
         if (registrationResult && registrationResult.length > 0) {
           // ホットキー登録エラーがある場合
+          console.log('[DEBUG] Hotkey registration errors:', registrationResult);
           return { 
             success: false, 
             error: registrationResult.join('\n') 
@@ -762,8 +781,10 @@ class StickyNotesApp {
         }
         
         // 既存の全ての付箋ウィンドウに設定変更を通知
+        console.log('[DEBUG] Notifying settings change');
         this.notifySettingsChange();
         
+        console.log('[DEBUG] save-settings completed successfully');
         return { success: true };
       } catch (error) {
         console.error('Error saving settings:', error);
@@ -1231,21 +1252,94 @@ class StickyNotesApp {
     }
   }
 
-  private notifySettingsChange() {
+  private async notifySettingsChange() {
     // 全ての付箋ウィンドウに設定変更を通知
     for (const [noteId, window] of this.windows) {
       if (!window.isDestroyed()) {
         window.webContents.send('settings-changed');
       }
     }
+    
+    // 設定が保存されたときも非アクティブなノートのサイズを更新（永続化）
+    try {
+      const settings = await this.dataStore.getSettings();
+      await this.updateInactiveNoteSizes(settings, true);
+    } catch (error) {
+      console.error('Error updating inactive note sizes after settings change:', error);
+    }
   }
 
-  private notifySettingsPreview(previewSettings: any) {
+  private async notifySettingsPreview(previewSettings: any) {
+    console.log('[DEBUG] notifySettingsPreview called with:', previewSettings);
+    
     // 全ての付箋ウィンドウにプレビュー設定を送信
     for (const [noteId, window] of this.windows) {
       if (!window.isDestroyed()) {
         window.webContents.send('settings-preview', previewSettings);
       }
+    }
+    
+    // 非アクティブサイズが変更された場合、現在非アクティブなノートのサイズを更新
+    if (previewSettings.defaultInactiveWidth !== undefined || previewSettings.defaultInactiveHeight !== undefined) {
+      await this.updateInactiveNoteSizes(previewSettings, false);
+    }
+  }
+
+  private async updateInactiveNoteSizes(previewSettings: any, isPermanent: boolean = false) {
+    try {
+      const notes = await this.dataStore.getAllNotes();
+      const defaultWidth = previewSettings.defaultInactiveWidth;
+      const defaultHeight = previewSettings.defaultInactiveHeight;
+      
+      console.log('[DEBUG] updateInactiveNoteSizes called with:', { defaultWidth, defaultHeight, noteCount: notes.length, isPermanent });
+      
+      for (const note of notes) {
+        if (!note.isActive) {
+          const window = this.windows.get(note.id);
+          if (window && !window.isDestroyed()) {
+            // デフォルトサイズが設定されている場合は、常に適用
+            let newWidth = defaultWidth || note.inactiveWidth;
+            let newHeight = defaultHeight || note.inactiveHeight;
+            
+            // 最終的なフォールバック値を設定
+            if (!newWidth) newWidth = 200;
+            if (!newHeight) newHeight = 150;
+            
+            console.log('[DEBUG] Note:', note.id, 'isActive:', note.isActive, 'current size:', note.inactiveWidth, 'x', note.inactiveHeight, 'new size:', newWidth, 'x', newHeight);
+            
+            if (newWidth && newHeight) {
+              // 最小サイズ制限を一時的に解除して、設定されたサイズに変更できるようにする
+              window.setMinimumSize(Math.min(newWidth, 50), Math.min(newHeight, 50));
+              window.setSize(newWidth, newHeight);
+              console.log('[DEBUG] Window size changed to:', newWidth, 'x', newHeight);
+              
+              // 永続化が必要な場合（設定保存時）はデータベースも更新
+              if (isPermanent && (defaultWidth || defaultHeight)) {
+                // デフォルトサイズが設定されている場合は、常にサイズを更新
+                const updates: any = {};
+                if (defaultWidth) {
+                  updates.inactiveWidth = newWidth;
+                }
+                if (defaultHeight) {
+                  updates.inactiveHeight = newHeight;
+                }
+                
+                console.log('[DEBUG] Updating note', note.id, 'with:', updates);
+                await this.dataStore.updateNote(note.id, updates);
+                
+                // ノートデータをウィンドウに再送信して、データが確実に反映されるようにする
+                const updatedNote = await this.dataStore.getNote(note.id);
+                if (updatedNote) {
+                  window.webContents.send('note-data', updatedNote);
+                  console.log('[DEBUG] Note data resent to window:', note.id);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error updating inactive note sizes:', error);
     }
   }
 

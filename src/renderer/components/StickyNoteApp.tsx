@@ -31,6 +31,8 @@ export const StickyNoteApp: React.FC = () => {
           defaultFontSize: 14,
           defaultBackgroundColor: '#CCFFE6',
           headerIconSize: 16,
+          defaultInactiveWidth: 200,
+          defaultInactiveHeight: 150,
           showAllHotkey: '',
           hideAllHotkey: '',
           searchHotkey: '',
@@ -50,7 +52,6 @@ export const StickyNoteApp: React.FC = () => {
 
     // 設定変更イベントをリッスン
     const handleSettingsChanged = () => {
-      console.log('[DEBUG] Settings changed event received, note ID:', noteId, 'isActive:', isActive);
       // 保存が確実に完了するまで少し待ってから設定を読み込み
       setTimeout(() => {
         loadSettings();
@@ -61,7 +62,6 @@ export const StickyNoteApp: React.FC = () => {
 
     // 一時的な設定変更プレビューをリッスン
     const handleSettingsPreview = (previewSettings: AppSettings) => {
-      console.log('[DEBUG] Settings preview received, note ID:', noteId, 'isActive:', isActive, 'headerIconSize:', previewSettings.headerIconSize);
       setSettings(previewSettings);
       // 強制的に再レンダリングをトリガー
       setRenderKey(prev => prev + 1);

@@ -142,15 +142,13 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   onTogglePin,
   onToggleLock
 }) => {
-  // デバッグログ
-  console.log('[DEBUG] NoteHeader render - note ID:', note.id, 'isActive:', isActive, 'headerIconSize:', headerIconSize);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontSizePicker, setShowFontSizePicker] = useState(false);
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 });
   const colorButtonRef = useRef<HTMLButtonElement>(null);
   const fontButtonRef = useRef<HTMLButtonElement>(null);
   
-  // ダブルクリック検出用
+  // ダブルクリック検出用（カラーピッカーで使用）
   const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
   const [clickCount, setClickCount] = useState(0);
   
@@ -214,6 +212,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
       };
     }
   }, [showColorPicker, showFontSizePicker]);
+
 
   const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
     e.preventDefault();
@@ -289,6 +288,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
     width: `${headerIconSize + 8}px`,
     height: `${headerIconSize + 8}px`
   }), [headerIconSize]);
+
 
   if (!isActive) {
     

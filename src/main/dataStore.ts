@@ -148,11 +148,11 @@ export class DataStore {
     const notes = await this.getAllNotes();
     const settings = await this.getSettings();
     
-    // 最小サイズで開始
-    const minWidth = 150;
-    const minHeight = 100;
+    // 設定からデフォルトサイズを取得
     const defaultActiveWidth = 300;
     const defaultActiveHeight = 200;
+    const defaultInactiveWidth = settings.defaultInactiveWidth || 150;
+    const defaultInactiveHeight = settings.defaultInactiveHeight || 125;
     
     // 基本位置（後でメイン側で衝突回避処理される）
     const baseX = nearNote ? nearNote.inactiveX : 100;
@@ -166,11 +166,11 @@ export class DataStore {
       activeY: 0, // 初回アクティブ化時に設定される
       activeWidth: defaultActiveWidth,
       activeHeight: defaultActiveHeight,
-      // 非アクティブ状態の位置とサイズ（最小サイズ固定）
+      // 非アクティブ状態の位置とサイズ（設定から取得）
       inactiveX: baseX,
       inactiveY: baseY,
-      inactiveWidth: minWidth,
-      inactiveHeight: minHeight,
+      inactiveWidth: defaultInactiveWidth,
+      inactiveHeight: defaultInactiveHeight,
       backgroundColor: nearNote ? nearNote.backgroundColor : settings.defaultBackgroundColor,
       headerColor: nearNote ? nearNote.headerColor : settings.defaultHeaderColor, // 親付箋のヘッダー色を引き継ぐ
       fontSize: nearNote ? nearNote.fontSize : settings.defaultFontSize,
@@ -277,20 +277,51 @@ export class DataStore {
         const defaultSettings: AppSettings = {
           defaultFontSize: 14,
           defaultBackgroundColor: '#CCFFE6',  // パステルグリーン
-          headerIconSize: 16  // デフォルトヘッダーアイコンサイズ
+          headerIconSize: 16,  // デフォルトヘッダーアイコンサイズ
+          defaultInactiveWidth: 150,  // 非アクティブモードのデフォルト幅（50-300の中間値）
+          defaultInactiveHeight: 125  // 非アクティブモードのデフォルト高さ（50-200の中間値）
         };
+        console.log('[DEBUG] Settings file not found, creating default:', defaultSettings);
         await this.saveSettings(defaultSettings);
         return defaultSettings;
       }
       const data = fs.readFileSync(this.settingsFile, 'utf8');
-      return JSON.parse(data);
+      const rawSettings = JSON.parse(data);
+      console.log('[DEBUG] Raw settings loaded from file:', rawSettings);
+      
+      // 欠損したフィールドを補完
+      const settings: AppSettings = {
+        defaultFontSize: rawSettings.defaultFontSize ?? 14,
+        defaultBackgroundColor: rawSettings.defaultBackgroundColor ?? '#CCFFE6',
+        headerIconSize: rawSettings.headerIconSize ?? 16,
+        defaultInactiveWidth: rawSettings.defaultInactiveWidth ?? 150,
+        defaultInactiveHeight: rawSettings.defaultInactiveHeight ?? 125,
+        showAllHotkey: rawSettings.showAllHotkey,
+        hideAllHotkey: rawSettings.hideAllHotkey,
+        searchHotkey: rawSettings.searchHotkey,
+        autoStart: rawSettings.autoStart ?? false
+      };
+      
+      console.log('[DEBUG] Settings after field completion:', settings);
+      
+      // 補完した設定を保存（次回の読み込み時にデフォルト値の適用を避けるため）
+      if (rawSettings.defaultInactiveWidth === undefined || rawSettings.defaultInactiveHeight === undefined) {
+        console.log('[DEBUG] Saving completed settings to avoid default fallback next time');
+        await this.saveSettings(settings);
+      }
+      
+      return settings;
     } catch (error) {
       console.error('Error loading settings:', error);
-      return {
+      const fallbackSettings = {
         defaultFontSize: 14,
         defaultBackgroundColor: '#CCFFE6',
-        headerIconSize: 16
+        headerIconSize: 16,
+        defaultInactiveWidth: 150,  // 50-300の中間値
+        defaultInactiveHeight: 125  // 50-200の中間値
       };
+      console.log('[DEBUG] Using fallback settings:', fallbackSettings);
+      return fallbackSettings;
     }
   }
 
@@ -306,10 +337,11 @@ export class DataStore {
     try {
       const currentSettings = await this.getSettings();
       const updatedSettings = { ...currentSettings, ...updates };
+      console.log('[DEBUG] updateSettings - current:', currentSettings);
+      console.log('[DEBUG] updateSettings - updates:', updates);
+      console.log('[DEBUG] updateSettings - final:', updatedSettings);
       await this.saveSettings(updatedSettings);
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Settings updated successfully:', updates);
-      }
+      console.log('[DEBUG] Settings updated successfully');
     } catch (error) {
       console.error('Error updating settings:', error);
       throw error;
