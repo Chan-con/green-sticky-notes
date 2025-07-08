@@ -33,9 +33,12 @@ export const StickyNoteApp: React.FC = () => {
           headerIconSize: 16,
           defaultInactiveWidth: 200,
           defaultInactiveHeight: 150,
+          defaultInactiveFontSize: 12,
           showAllHotkey: '',
           hideAllHotkey: '',
           searchHotkey: '',
+          pinHotkey: '',
+          lockHotkey: '',
           autoStart: false
         });
       }
@@ -77,8 +80,9 @@ export const StickyNoteApp: React.FC = () => {
     }
     
     
-    // ESC２回連続検出のキーボードイベントハンドラー
+    // キーボードイベントハンドラー
     const handleKeyDown = (event: KeyboardEvent) => {
+      // ESC２回連続でアクティブモード終了
       if (event.key === 'Escape' && isActive && note) {
         const currentTime = Date.now();
         const timeSinceLastEsc = currentTime - lastEscPressRef.current;
@@ -93,6 +97,40 @@ export const StickyNoteApp: React.FC = () => {
           // 初回のESC押下：タイムスタンプを記録
           lastEscPressRef.current = currentTime;
         }
+        return;
+      }
+
+      // アクティブモードでのみショートカットキーを処理
+      if (!isActive || !note || !settings) return;
+
+      // キーの組み合わせを作成
+      const keys = [];
+      if (event.ctrlKey) keys.push('Ctrl');
+      if (event.shiftKey) keys.push('Shift');
+      if (event.altKey) keys.push('Alt');
+      if (event.metaKey) keys.push('Meta');
+      
+      const mainKey = event.key.length === 1 ? event.key.toUpperCase() : event.key;
+      if (!['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
+        keys.push(mainKey);
+      }
+      
+      const keyCombo = keys.join('+');
+
+      // ピン留めショートカットキー
+      if (settings.pinHotkey && keyCombo === settings.pinHotkey) {
+        event.preventDefault();
+        const newPinnedState = !note.isPinned;
+        updateNoteSetting({ isPinned: newPinnedState });
+        return;
+      }
+
+      // ロックショートカットキー
+      if (settings.lockHotkey && keyCombo === settings.lockHotkey) {
+        event.preventDefault();
+        const newLockedState = !note.isLocked;
+        updateNoteSetting({ isLocked: newLockedState });
+        return;
       }
     };
     
@@ -295,6 +333,7 @@ export const StickyNoteApp: React.FC = () => {
         ref={contentRef}
         onContentChange={updateNoteContent}
         onBlur={handleBlur}
+        inactiveFontSize={settings?.defaultInactiveFontSize ?? 12}
       />
     </div>
   );

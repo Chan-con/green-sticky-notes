@@ -53,9 +53,12 @@ export interface AppSettings {
   headerIconSize: number; // ヘッダーアイコンのサイズ（12-32px）
   defaultInactiveWidth: number; // 非アクティブモードのデフォルト幅（100-500px）
   defaultInactiveHeight: number; // 非アクティブモードのデフォルト高さ（100-500px）
+  defaultInactiveFontSize: number; // 非アクティブモードのデフォルトフォントサイズ（8-20px）
   showAllHotkey?: string; // すべてのノートを表示するホットキー
   hideAllHotkey?: string; // すべてのノートを隠すホットキー
   searchHotkey?: string; // 検索ウィンドウの表示/非表示を切り替えるホットキー
+  pinHotkey?: string; // アクティブ付箋のピン留めを切り替えるホットキー
+  lockHotkey?: string; // アクティブ付箋のロックを切り替えるホットキー
   autoStart?: boolean; // PC起動時の自動開始設定
 }
 

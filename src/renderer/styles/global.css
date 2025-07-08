@@ -108,6 +108,24 @@ html, body {
   user-select: none;
 }
 
+.url-link {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.url-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.url-highlight {
+  background-color: rgba(37, 99, 235, 0.1);
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+
 .note-content::-webkit-scrollbar {
   width: 6px;
 }

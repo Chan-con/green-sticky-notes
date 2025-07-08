@@ -1,5 +1,7 @@
-import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, globalShortcut } from 'electron';
+import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, globalShortcut, dialog, shell } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { StickyNote, DisplayInfo, AppSettings, SearchQuery } from '../types';
 import { DataStore } from './dataStore';
 import { WindowStateManager } from './windowStateManager';
@@ -743,9 +745,12 @@ class StickyNotesApp {
         showAllHotkey: settings.showAllHotkey || '',
         hideAllHotkey: settings.hideAllHotkey || '',
         searchHotkey: settings.searchHotkey || '',
+        pinHotkey: settings.pinHotkey || '',
+        lockHotkey: settings.lockHotkey || '',
         headerIconSize: settings.headerIconSize || 16,
         defaultInactiveWidth: settings.defaultInactiveWidth || 150,
         defaultInactiveHeight: settings.defaultInactiveHeight || 125,
+        defaultInactiveFontSize: settings.defaultInactiveFontSize || 12,
         autoStart: autoStartStatus
       };
       console.log('[DEBUG] get-settings IPC handler - returning:', result);
@@ -836,6 +841,270 @@ class StickyNotesApp {
 
     ipcMain.handle('open-console', () => {
       this.openConsole();
+    });
+
+    ipcMain.handle('export-notes-to-txt', async () => {
+      console.log('[DEBUG] export-notes-to-txt IPC handler called');
+      try {
+        // 現在の日付を取得（YYYY-MM-DD形式）
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        console.log('[DEBUG] Export date string:', dateStr);
+        
+        // エクスポートフォルダのパスを作成
+        const downloadsPath = path.join(os.homedir(), 'Downloads');
+        const exportFolderPath = path.join(downloadsPath, dateStr);
+        console.log('[DEBUG] Export folder path:', exportFolderPath);
+        
+        // フォルダが存在しない場合は作成
+        if (!fs.existsSync(exportFolderPath)) {
+          console.log('[DEBUG] Creating export folder');
+          fs.mkdirSync(exportFolderPath, { recursive: true });
+        } else {
+          console.log('[DEBUG] Export folder already exists');
+        }
+        
+        // すべての付箋を取得
+        console.log('[DEBUG] Getting all notes from dataStore');
+        const notes = await this.dataStore.getAllNotes();
+        console.log('[DEBUG] Retrieved notes count:', notes.length);
+        
+        if (notes.length === 0) {
+          console.log('[DEBUG] No notes to export');
+          return {
+            success: false,
+            error: 'エクスポートする付箋がありません。'
+          };
+        }
+        
+        // 各付箋を個別のテキストファイルとして保存
+        for (const note of notes) {
+          try {
+            console.log('[DEBUG] Exporting note:', note.id);
+            
+            // 作成日時を取得してフォーマット
+            const createdAt = new Date(note.createdAt);
+            const createdStr = createdAt.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            
+            // ファイル名を作成（付箋_[作成日時]_[付箋ID].txt）
+            const fileName = `付箋_${createdStr}_${note.id}.txt`;
+            const filePath = path.join(exportFolderPath, fileName);
+            console.log('[DEBUG] Exporting to file:', filePath);
+            
+            // 付箋の内容を取得
+            let content = '';
+            
+            if (note.content) {
+              // リッチコンテンツの場合はテキスト部分のみを抽出
+              if (typeof note.content === 'string') {
+                // プレーンテキストの場合
+                content = note.content;
+              } else {
+                // リッチコンテンツの場合（HTMLやJSON形式）
+                content = this.extractTextFromRichContent(note.content);
+              }
+            }
+            
+            // 空の場合はプレースホルダーを設定
+            if (!content.trim()) {
+              content = '（空の付箋）';
+            }
+            
+            console.log('[DEBUG] Note content length:', content.length);
+            
+            // ファイルに書き込み
+            fs.writeFileSync(filePath, content, 'utf8');
+            console.log('[DEBUG] Successfully exported note:', note.id);
+            
+          } catch (error) {
+            console.error(`[ERROR] Error exporting note ${note.id}:`, error);
+            // 個別のファイルでエラーが発生しても続行
+          }
+        }
+        
+        console.log('[DEBUG] Export completed successfully');
+        return {
+          success: true,
+          path: exportFolderPath
+        };
+        
+      } catch (error) {
+        console.error('[ERROR] Error exporting notes:', error);
+        if (error instanceof Error) {
+          console.error('[ERROR] Error name:', error.name);
+          console.error('[ERROR] Error message:', error.message);
+          console.error('[ERROR] Error stack:', error.stack);
+        }
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '不明なエラーが発生しました。'
+        };
+      }
+    });
+
+    ipcMain.handle('select-folder-and-export-notes', async () => {
+      console.log('[DEBUG] select-folder-and-export-notes IPC handler called');
+      try {
+        // フォルダ選択ダイアログを表示
+        const result = await dialog.showOpenDialog({
+          title: 'エクスポート先フォルダを選択',
+          properties: ['openDirectory'],
+          defaultPath: path.join(os.homedir(), 'Downloads')
+        });
+        
+        // ユーザーがキャンセルした場合
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+          console.log('[DEBUG] User canceled folder selection');
+          return {
+            success: false,
+            error: 'ユーザーによってキャンセルされました'
+          };
+        }
+        
+        const selectedFolder = result.filePaths[0];
+        console.log('[DEBUG] Selected folder:', selectedFolder);
+        
+        // 現在の日付を取得（YYYY-MM-DD形式）
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        console.log('[DEBUG] Export date string:', dateStr);
+        
+        // 選択されたフォルダ内に日付フォルダを作成
+        const exportFolderPath = path.join(selectedFolder, dateStr);
+        console.log('[DEBUG] Export folder path:', exportFolderPath);
+        
+        // フォルダが存在しない場合は作成
+        if (!fs.existsSync(exportFolderPath)) {
+          console.log('[DEBUG] Creating export folder');
+          fs.mkdirSync(exportFolderPath, { recursive: true });
+        } else {
+          console.log('[DEBUG] Export folder already exists');
+        }
+        
+        // すべての付箋を取得
+        console.log('[DEBUG] Getting all notes from dataStore');
+        const notes = await this.dataStore.getAllNotes();
+        console.log('[DEBUG] Retrieved notes count:', notes.length);
+        
+        if (notes.length === 0) {
+          console.log('[DEBUG] No notes to export');
+          return {
+            success: false,
+            error: 'エクスポートする付箋がありません。'
+          };
+        }
+        
+        // 各付箋を個別のテキストファイルとして保存
+        for (const note of notes) {
+          try {
+            console.log('[DEBUG] Exporting note:', note.id);
+            
+            // 作成日時を取得してフォーマット
+            const createdAt = new Date(note.createdAt);
+            const createdStr = createdAt.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            
+            // ファイル名を作成（付箋_[作成日時]_[付箋ID].txt）
+            const fileName = `付箋_${createdStr}_${note.id}.txt`;
+            const filePath = path.join(exportFolderPath, fileName);
+            console.log('[DEBUG] Exporting to file:', filePath);
+            
+            // 付箋の内容を取得
+            let content = '';
+            
+            if (note.content) {
+              // リッチコンテンツの場合はテキスト部分のみを抽出
+              if (typeof note.content === 'string') {
+                // プレーンテキストの場合
+                content = note.content;
+              } else {
+                // リッチコンテンツの場合（HTMLやJSON形式）
+                content = this.extractTextFromRichContent(note.content);
+              }
+            }
+            
+            // 空の場合はプレースホルダーを設定
+            if (!content.trim()) {
+              content = '（空の付箋）';
+            }
+            
+            console.log('[DEBUG] Note content length:', content.length);
+            
+            // ファイルに書き込み
+            fs.writeFileSync(filePath, content, 'utf8');
+            console.log('[DEBUG] Successfully exported note:', note.id);
+            
+          } catch (error) {
+            console.error(`[ERROR] Error exporting note ${note.id}:`, error);
+            // 個別のファイルでエラーが発生しても続行
+          }
+        }
+        
+        console.log('[DEBUG] Export completed successfully');
+        return {
+          success: true,
+          path: exportFolderPath
+        };
+        
+      } catch (error) {
+        console.error('[ERROR] Error in select-folder-and-export-notes:', error);
+        if (error instanceof Error) {
+          console.error('[ERROR] Error name:', error.name);
+          console.error('[ERROR] Error message:', error.message);
+          console.error('[ERROR] Error stack:', error.stack);
+        }
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '不明なエラーが発生しました。'
+        };
+      }
+    });
+
+    // URLをブラウザで開くIPCハンドラー
+    ipcMain.handle('open-url-in-browser', async (_, url: string) => {
+      try {
+        console.log('[DEBUG] open-url-in-browser called with URL:', url);
+        
+        // URLバリデーション: https://またはhttp://で始まるURLのみ許可
+        if (!url || typeof url !== 'string') {
+          console.error('[ERROR] Invalid URL provided:', url);
+          return false;
+        }
+        
+        // URLの先頭と末尾の空白を削除
+        const trimmedUrl = url.trim();
+        
+        // プロトコルのチェック（厳密なバリデーション）
+        const urlPattern = /^https?:\/\/.+/i;
+        if (!urlPattern.test(trimmedUrl)) {
+          console.error('[ERROR] URL must start with http:// or https://:', trimmedUrl);
+          return false;
+        }
+        
+        // 追加のセキュリティチェック: 不正なスキーム防止
+        const urlObj = new URL(trimmedUrl);
+        if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+          console.error('[ERROR] Only HTTP and HTTPS protocols are allowed:', urlObj.protocol);
+          return false;
+        }
+        
+        // ホスト名の存在チェック
+        if (!urlObj.hostname) {
+          console.error('[ERROR] URL must have a valid hostname:', trimmedUrl);
+          return false;
+        }
+        
+        // shellモジュールを使用してURLをデフォルトブラウザで開く
+        await shell.openExternal(trimmedUrl);
+        console.log('[DEBUG] Successfully opened URL in browser:', trimmedUrl);
+        
+        return true;
+      } catch (error) {
+        console.error('[ERROR] Failed to open URL in browser:', error);
+        if (error instanceof Error) {
+          console.error('[ERROR] Error details:', error.message);
+        }
+        return false;
+      }
     });
 
   }
@@ -1530,6 +1799,44 @@ class StickyNotesApp {
       this.consoleWindow?.show();
       this.consoleWindow?.focus();
     });
+  }
+
+  /**
+   * リッチコンテンツからテキスト部分のみを抽出する
+   */
+  private extractTextFromRichContent(content: any): string {
+    try {
+      // 文字列の場合はそのまま返す
+      if (typeof content === 'string') {
+        return content;
+      }
+      
+      // オブジェクトの場合
+      if (typeof content === 'object' && content !== null) {
+        // HTMLコンテンツの場合、HTMLタグを除去
+        if (typeof content.html === 'string') {
+          return content.html.replace(/<[^>]*>/g, '');
+        }
+        
+        // JSON形式のリッチテキストの場合
+        if (content.ops && Array.isArray(content.ops)) {
+          // Quill.jsのDelta形式の場合
+          return content.ops
+            .filter((op: any) => op.insert && typeof op.insert === 'string')
+            .map((op: any) => op.insert)
+            .join('');
+        }
+        
+        // その他のオブジェクトの場合、JSON文字列化してから処理
+        const jsonStr = JSON.stringify(content);
+        return jsonStr.replace(/[{}"\[\]:,]/g, ' ').trim();
+      }
+      
+      return '';
+    } catch (error) {
+      console.error('Error extracting text from rich content:', error);
+      return '';
+    }
   }
 
 }

@@ -279,7 +279,8 @@ export class DataStore {
           defaultBackgroundColor: '#CCFFE6',  // パステルグリーン
           headerIconSize: 16,  // デフォルトヘッダーアイコンサイズ
           defaultInactiveWidth: 150,  // 非アクティブモードのデフォルト幅（50-300の中間値）
-          defaultInactiveHeight: 125  // 非アクティブモードのデフォルト高さ（50-200の中間値）
+          defaultInactiveHeight: 125,  // 非アクティブモードのデフォルト高さ（50-200の中間値）
+          defaultInactiveFontSize: 12  // 非アクティブモードのデフォルトフォントサイズ（8-20の中間値）
         };
         console.log('[DEBUG] Settings file not found, creating default:', defaultSettings);
         await this.saveSettings(defaultSettings);
@@ -296,16 +297,19 @@ export class DataStore {
         headerIconSize: rawSettings.headerIconSize ?? 16,
         defaultInactiveWidth: rawSettings.defaultInactiveWidth ?? 150,
         defaultInactiveHeight: rawSettings.defaultInactiveHeight ?? 125,
+        defaultInactiveFontSize: rawSettings.defaultInactiveFontSize ?? 12,
         showAllHotkey: rawSettings.showAllHotkey,
         hideAllHotkey: rawSettings.hideAllHotkey,
         searchHotkey: rawSettings.searchHotkey,
+        pinHotkey: rawSettings.pinHotkey,
+        lockHotkey: rawSettings.lockHotkey,
         autoStart: rawSettings.autoStart ?? false
       };
       
       console.log('[DEBUG] Settings after field completion:', settings);
       
       // 補完した設定を保存（次回の読み込み時にデフォルト値の適用を避けるため）
-      if (rawSettings.defaultInactiveWidth === undefined || rawSettings.defaultInactiveHeight === undefined) {
+      if (rawSettings.defaultInactiveWidth === undefined || rawSettings.defaultInactiveHeight === undefined || rawSettings.defaultInactiveFontSize === undefined) {
         console.log('[DEBUG] Saving completed settings to avoid default fallback next time');
         await this.saveSettings(settings);
       }
@@ -318,7 +322,8 @@ export class DataStore {
         defaultBackgroundColor: '#CCFFE6',
         headerIconSize: 16,
         defaultInactiveWidth: 150,  // 50-300の中間値
-        defaultInactiveHeight: 125  // 50-200の中間値
+        defaultInactiveHeight: 125,  // 50-200の中間値
+        defaultInactiveFontSize: 12  // 8-20の中間値
       };
       console.log('[DEBUG] Using fallback settings:', fallbackSettings);
       return fallbackSettings;

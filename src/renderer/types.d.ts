@@ -19,6 +19,9 @@ declare global {
       closeSettings: () => Promise<void>;
       getSettings: () => Promise<any>;
       saveSettings: (settings: any) => Promise<boolean>;
+      exportNotesToTxt: () => Promise<{success: boolean; path?: string; error?: string}>;
+      selectFolderAndExportNotes: () => Promise<{success: boolean; path?: string; error?: string}>;
+      openUrlInBrowser: (url: string) => Promise<boolean>;
       
       // 検索関連のメソッド
       searchNotes: (query: SearchQuery) => Promise<SearchResult[]>;

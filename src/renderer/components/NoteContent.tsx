@@ -6,13 +6,47 @@ interface NoteContentProps {
   isActive: boolean;
   onContentChange: (content: string) => void;
   onBlur: () => void;
+  inactiveFontSize?: number;
 }
 
 export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
-  ({ note, isActive, onContentChange, onBlur }, ref) => {
+  ({ note, isActive, onContentChange, onBlur, inactiveFontSize = 12 }, ref) => {
+    const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       onContentChange(e.target.value);
     };
+
+    const detectUrlAtPosition = (text: string, position: number): string | null => {
+      const matches = [...text.matchAll(URL_REGEX)];
+      for (const match of matches) {
+        if (match.index !== undefined && 
+            position >= match.index && 
+            position <= match.index + match[0].length) {
+          return match[0];
+        }
+      }
+      return null;
+    };
+
+    const handleDoubleClick = async (e: React.MouseEvent<HTMLTextAreaElement>) => {
+      if (!isActive) return;
+      
+      const textarea = e.currentTarget;
+      const position = textarea.selectionStart;
+      const text = textarea.value;
+      const url = detectUrlAtPosition(text, position);
+      
+      if (url && window.electronAPI?.openUrlInBrowser) {
+        try {
+          await window.electronAPI.openUrlInBrowser(url);
+        } catch (error) {
+          console.error('Failed to open URL:', error);
+        }
+      }
+    };
+
+
 
     const getContentAsString = (content: string | RichContent): string => {
       if (typeof content === 'string') {
@@ -54,6 +88,7 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
           onChange={handleChange}
           onBlur={onBlur}
           onContextMenu={handleContextMenu}
+          onDoubleClick={handleDoubleClick}
           placeholder="付箋の内容を入力..."
           style={{ fontSize: `${note.fontSize}px` }}
         />
@@ -64,12 +99,15 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
       <div
         className="note-content stay-mode"
         style={{ 
-          fontSize: '12px',
+          fontSize: `${inactiveFontSize}px`,
           color: getContentAsString(note.content) ? 'inherit' : 'rgba(0, 0, 0, 0.4)',
           whiteSpace: 'pre-wrap'
         }}
       >
-        {getContentAsString(note.content) ? truncateText(getContentAsString(note.content)) : '空の付箋'}
+        {getContentAsString(note.content) ? 
+          truncateText(getContentAsString(note.content)) : 
+          '空の付箋'
+        }
       </div>
     );
   }

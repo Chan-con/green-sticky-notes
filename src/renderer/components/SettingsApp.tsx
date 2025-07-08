@@ -5,9 +5,12 @@ interface SettingsState {
   showAllHotkey: string;
   hideAllHotkey: string;
   searchHotkey: string;
+  pinHotkey: string;
+  lockHotkey: string;
   headerIconSize: number;
   defaultInactiveWidth: number;
   defaultInactiveHeight: number;
+  defaultInactiveFontSize: number;
   autoStart: boolean;
 }
 
@@ -16,9 +19,12 @@ export const SettingsApp: React.FC = () => {
     showAllHotkey: '',
     hideAllHotkey: '',
     searchHotkey: '',
+    pinHotkey: '',
+    lockHotkey: '',
     headerIconSize: 16,
     defaultInactiveWidth: 100,  // 仮の初期値
     defaultInactiveHeight: 100, // 仮の初期値
+    defaultInactiveFontSize: 12,
     autoStart: false
   });
   
@@ -26,9 +32,12 @@ export const SettingsApp: React.FC = () => {
     showAllHotkey: '',
     hideAllHotkey: '',
     searchHotkey: '',
+    pinHotkey: '',
+    lockHotkey: '',
     headerIconSize: 16,
     defaultInactiveWidth: 100,  // 仮の初期値
     defaultInactiveHeight: 100, // 仮の初期値
+    defaultInactiveFontSize: 12,
     autoStart: false
   });
   
@@ -37,6 +46,7 @@ export const SettingsApp: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isClosingSafely, setIsClosingSafely] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout>();
   const isClosingSafelyRef = useRef(false);
   const originalSettingsRef = useRef<SettingsState>(originalSettings);
@@ -61,9 +71,12 @@ export const SettingsApp: React.FC = () => {
             showAllHotkey: savedSettings.showAllHotkey ?? '',
             hideAllHotkey: savedSettings.hideAllHotkey ?? '',
             searchHotkey: savedSettings.searchHotkey ?? '',
+            pinHotkey: savedSettings.pinHotkey ?? '',
+            lockHotkey: savedSettings.lockHotkey ?? '',
             headerIconSize: savedSettings.headerIconSize ?? 16,
             defaultInactiveWidth: savedSettings.defaultInactiveWidth !== undefined ? savedSettings.defaultInactiveWidth : 150,
             defaultInactiveHeight: savedSettings.defaultInactiveHeight !== undefined ? savedSettings.defaultInactiveHeight : 125,
+            defaultInactiveFontSize: savedSettings.defaultInactiveFontSize !== undefined ? savedSettings.defaultInactiveFontSize : 12,
             autoStart: savedSettings.autoStart ?? false
           };
           
@@ -79,9 +92,12 @@ export const SettingsApp: React.FC = () => {
           showAllHotkey: '',
           hideAllHotkey: '',
           searchHotkey: '',
+          pinHotkey: '',
+          lockHotkey: '',
           headerIconSize: 16,
           defaultInactiveWidth: 150,  // 新しい範囲の中間値
           defaultInactiveHeight: 125, // 新しい範囲の中間値
+          defaultInactiveFontSize: 12,
           autoStart: false
         };
         setSettings(defaultSettings);
@@ -255,6 +271,49 @@ export const SettingsApp: React.FC = () => {
     sendPreview(newSettings);
   };
 
+  // 非アクティブフォントサイズ変更時のハンドラ
+  const handleInactiveFontSizeChange = (value: number) => {
+    const newSettings = { ...settings, defaultInactiveFontSize: value };
+    setSettings(newSettings);
+    sendPreview(newSettings);
+  };
+
+  const handleExportToTxt = async () => {
+    console.log('[DEBUG] handleExportToTxt called');
+    try {
+      setIsExporting(true);
+      setErrorMessage('');
+      
+      console.log('[DEBUG] window.electronAPI exists:', !!window.electronAPI);
+      console.log('[DEBUG] selectFolderAndExportNotes exists:', !!window.electronAPI?.selectFolderAndExportNotes);
+      
+      if (window.electronAPI && window.electronAPI.selectFolderAndExportNotes) {
+        console.log('[DEBUG] Calling selectFolderAndExportNotes...');
+        const result = await window.electronAPI.selectFolderAndExportNotes();
+        console.log('[DEBUG] Export result:', result);
+        
+        if (result && typeof result === 'object' && result.success) {
+          console.log('Export successful:', result.path);
+          // 成功メッセージを表示（オプション）
+        } else if (result && typeof result === 'object' && !result.success) {
+          console.error('[DEBUG] Export failed:', result.error);
+          if (result.error !== 'ユーザーによってキャンセルされました') {
+            setErrorMessage(result.error || 'エクスポートに失敗しました');
+          }
+        }
+      } else {
+        console.error('[DEBUG] electronAPI or selectFolderAndExportNotes not available');
+        setErrorMessage('エクスポート機能が利用できません');
+      }
+    } catch (error) {
+      console.error('[DEBUG] Export error:', error);
+      setErrorMessage('エクスポート中にエラーが発生しました');
+    } finally {
+      console.log('[DEBUG] Setting isExporting to false');
+      setIsExporting(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       setErrorMessage(''); // エラーメッセージをクリア
@@ -419,6 +478,57 @@ export const SettingsApp: React.FC = () => {
         </div>
 
         <div className="settings-section">
+          <h3>ショートカットキー設定</h3>
+          
+          <div className="hotkey-setting">
+            <label>アクティブ付箋のピン留め切り替え:</label>
+            <div className="hotkey-input-group">
+              <input
+                type="text"
+                value={listeningFor === 'pinHotkey' 
+                  ? (pressedKeys.size > 0 ? Array.from(pressedKeys).join('+') : 'キーを押してください...') 
+                  : settings.pinHotkey}
+                readOnly
+                onClick={() => startListening('pinHotkey')}
+                placeholder="クリックしてキーを設定"
+                className={listeningFor === 'pinHotkey' ? 'listening' : ''}
+              />
+              <button 
+                type="button" 
+                className="clear-button"
+                onClick={() => clearHotkey('pinHotkey')}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          
+          <div className="hotkey-setting">
+            <label>アクティブ付箋のロック切り替え:</label>
+            <div className="hotkey-input-group">
+              <input
+                type="text"
+                value={listeningFor === 'lockHotkey' 
+                  ? (pressedKeys.size > 0 ? Array.from(pressedKeys).join('+') : 'キーを押してください...') 
+                  : settings.lockHotkey}
+                readOnly
+                onClick={() => startListening('lockHotkey')}
+                placeholder="クリックしてキーを設定"
+                className={listeningFor === 'lockHotkey' ? 'listening' : ''}
+              />
+              <button 
+                type="button" 
+                className="clear-button"
+                onClick={() => clearHotkey('lockHotkey')}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          
+        </div>
+
+        <div className="settings-section">
           <h3>サイズ設定</h3>
           
           <div className="setting-row">
@@ -468,6 +578,30 @@ export const SettingsApp: React.FC = () => {
               <span className="size-unit">px</span>
             </div>
           </div>
+          
+          <div className="setting-row">
+            <label htmlFor="defaultInactiveFontSize">非アクティブモードのフォントサイズ:</label>
+            <div className="size-input-group">
+              <input
+                type="range"
+                id="defaultInactiveFontSize"
+                min="8"
+                max="20"
+                value={settings.defaultInactiveFontSize}
+                onChange={(e) => handleInactiveFontSizeChange(parseInt(e.target.value))}
+                className="size-slider"
+              />
+              <input
+                type="number"
+                min="8"
+                max="20"
+                value={settings.defaultInactiveFontSize}
+                onChange={(e) => handleInactiveFontSizeChange(parseInt(e.target.value) || 12)}
+                className="size-input"
+              />
+              <span className="size-unit">px</span>
+            </div>
+          </div>
         </div>
 
         <div className="settings-section">
@@ -483,6 +617,20 @@ export const SettingsApp: React.FC = () => {
                 className="auto-start-checkbox"
               />
               <span className="checkbox-label">アプリケーションをWindows起動時に自動で開始する</span>
+            </div>
+          </div>
+          
+          <div className="setting-row">
+            <label>付箋のエクスポート:</label>
+            <div className="export-group">
+              <button 
+                type="button" 
+                onClick={handleExportToTxt}
+                disabled={isExporting}
+                className="export-button"
+              >
+                {isExporting ? 'エクスポート中...' : '.txtファイルで出力'}
+              </button>
             </div>
           </div>
           
