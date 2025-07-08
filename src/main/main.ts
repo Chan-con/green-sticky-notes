@@ -1279,7 +1279,8 @@ class StickyNotesApp {
       const hotkeys = [
         settings.showAllHotkey?.trim(),
         settings.hideAllHotkey?.trim(),
-        settings.searchHotkey?.trim()
+        settings.searchHotkey?.trim(),
+        settings.newNoteHotkey?.trim()
       ].filter(Boolean);
       
       const uniqueHotkeys = new Set(hotkeys);
@@ -1373,6 +1374,38 @@ class StickyNotesApp {
           } else {
             console.error(`Failed to register search hotkey: ${hotkey}`);
             registrationErrors.push(`ホットキー "${hotkey}" の登録に失敗しました`);
+          }
+        }
+      }
+
+      // 新しい付箋を追加するホットキー
+      if (settings.newNoteHotkey && settings.newNoteHotkey.trim()) {
+        const hotkey = settings.newNoteHotkey.trim();
+        
+        // 既に登録されているかチェック
+        if (globalShortcut.isRegistered(hotkey)) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`New note hotkey already registered by another application: ${hotkey}`);
+          }
+          registrationErrors.push(`新規付箋ホットキー "${hotkey}" は他のアプリケーションによって使用されています。別のキーを選択してください。`);
+        } else {
+          const success = globalShortcut.register(hotkey, () => {
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`New note hotkey pressed. Settings window open: ${this.isSettingsWindowOpen}`);
+            }
+            if (!this.isSettingsWindowOpen) {
+              this.createNewNoteFromTray();
+            }
+          });
+          
+          if (success) {
+            this.registeredHotkeys.add(hotkey);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`New note hotkey registered successfully: ${hotkey}`);
+            }
+          } else {
+            console.error(`Failed to register new note hotkey: ${hotkey}`);
+            registrationErrors.push(`新規付箋ホットキー "${hotkey}" の登録に失敗しました`);
           }
         }
       }

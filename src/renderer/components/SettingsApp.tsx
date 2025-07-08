@@ -7,6 +7,7 @@ interface SettingsState {
   searchHotkey: string;
   pinHotkey: string;
   lockHotkey: string;
+  newNoteHotkey: string;
   headerIconSize: number;
   defaultInactiveWidth: number;
   defaultInactiveHeight: number;
@@ -21,6 +22,7 @@ export const SettingsApp: React.FC = () => {
     searchHotkey: '',
     pinHotkey: '',
     lockHotkey: '',
+    newNoteHotkey: '',
     headerIconSize: 16,
     defaultInactiveWidth: 100,  // 仮の初期値
     defaultInactiveHeight: 100, // 仮の初期値
@@ -34,6 +36,7 @@ export const SettingsApp: React.FC = () => {
     searchHotkey: '',
     pinHotkey: '',
     lockHotkey: '',
+    newNoteHotkey: '',
     headerIconSize: 16,
     defaultInactiveWidth: 100,  // 仮の初期値
     defaultInactiveHeight: 100, // 仮の初期値
@@ -73,6 +76,7 @@ export const SettingsApp: React.FC = () => {
             searchHotkey: savedSettings.searchHotkey ?? '',
             pinHotkey: savedSettings.pinHotkey ?? '',
             lockHotkey: savedSettings.lockHotkey ?? '',
+            newNoteHotkey: savedSettings.newNoteHotkey ?? '',
             headerIconSize: savedSettings.headerIconSize ?? 16,
             defaultInactiveWidth: savedSettings.defaultInactiveWidth !== undefined ? savedSettings.defaultInactiveWidth : 150,
             defaultInactiveHeight: savedSettings.defaultInactiveHeight !== undefined ? savedSettings.defaultInactiveHeight : 125,
@@ -94,6 +98,7 @@ export const SettingsApp: React.FC = () => {
           searchHotkey: '',
           pinHotkey: '',
           lockHotkey: '',
+          newNoteHotkey: '',
           headerIconSize: 16,
           defaultInactiveWidth: 150,  // 新しい範囲の中間値
           defaultInactiveHeight: 125, // 新しい範囲の中間値
@@ -319,6 +324,39 @@ export const SettingsApp: React.FC = () => {
       setErrorMessage(''); // エラーメッセージをクリア
       console.log('[DEBUG] handleSave called with settings:', settings);
       
+      // ホットキーの重複チェック
+      const hotkeys = [
+        { key: 'showAllHotkey', label: 'すべてのノートを表示', value: settings.showAllHotkey?.trim() },
+        { key: 'hideAllHotkey', label: 'すべてのノートを隠す', value: settings.hideAllHotkey?.trim() },
+        { key: 'searchHotkey', label: '検索ウィンドウの表示/非表示', value: settings.searchHotkey?.trim() },
+        { key: 'pinHotkey', label: 'アクティブ付箋のピン留め切り替え', value: settings.pinHotkey?.trim() },
+        { key: 'lockHotkey', label: 'アクティブ付箋のロック切り替え', value: settings.lockHotkey?.trim() },
+        { key: 'newNoteHotkey', label: '新規ノート作成', value: settings.newNoteHotkey?.trim() }
+      ].filter(hotkey => hotkey.value && hotkey.value.length > 0);
+      
+      // 重複チェック
+      const duplicateKeys = new Set();
+      const duplicateLabels: string[] = [];
+      
+      for (let i = 0; i < hotkeys.length; i++) {
+        for (let j = i + 1; j < hotkeys.length; j++) {
+          if (hotkeys[i].value === hotkeys[j].value) {
+            duplicateKeys.add(hotkeys[i].value);
+            if (!duplicateLabels.includes(hotkeys[i].label)) {
+              duplicateLabels.push(hotkeys[i].label);
+            }
+            if (!duplicateLabels.includes(hotkeys[j].label)) {
+              duplicateLabels.push(hotkeys[j].label);
+            }
+          }
+        }
+      }
+      
+      if (duplicateKeys.size > 0) {
+        setErrorMessage(`以下のホットキーが重複しています: ${duplicateLabels.join(', ')}`);
+        return;
+      }
+      
       if (window.electronAPI && window.electronAPI.saveSettings) {
         const result: any = await window.electronAPI.saveSettings(settings);
         console.log('[DEBUG] Save result:', result);
@@ -469,6 +507,29 @@ export const SettingsApp: React.FC = () => {
                 type="button" 
                 className="clear-button"
                 onClick={() => clearHotkey('searchHotkey')}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          
+          <div className="hotkey-setting">
+            <label>新規ノート作成:</label>
+            <div className="hotkey-input-group">
+              <input
+                type="text"
+                value={listeningFor === 'newNoteHotkey' 
+                  ? (pressedKeys.size > 0 ? Array.from(pressedKeys).join('+') : 'キーを押してください...') 
+                  : settings.newNoteHotkey}
+                readOnly
+                onClick={() => startListening('newNoteHotkey')}
+                placeholder="クリックしてキーを設定"
+                className={listeningFor === 'newNoteHotkey' ? 'listening' : ''}
+              />
+              <button 
+                type="button" 
+                className="clear-button"
+                onClick={() => clearHotkey('newNoteHotkey')}
               >
                 ×
               </button>

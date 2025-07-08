@@ -59,6 +59,7 @@ export interface AppSettings {
   searchHotkey?: string; // 検索ウィンドウの表示/非表示を切り替えるホットキー
   pinHotkey?: string; // アクティブ付箋のピン留めを切り替えるホットキー
   lockHotkey?: string; // アクティブ付箋のロックを切り替えるホットキー
+  newNoteHotkey?: string; // 新しい付箋を追加するホットキー
   autoStart?: boolean; // PC起動時の自動開始設定
 }
 
