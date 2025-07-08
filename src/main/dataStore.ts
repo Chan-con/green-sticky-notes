@@ -280,7 +280,8 @@ export class DataStore {
           headerIconSize: 16,  // デフォルトヘッダーアイコンサイズ
           defaultInactiveWidth: 150,  // 非アクティブモードのデフォルト幅（50-300の中間値）
           defaultInactiveHeight: 125,  // 非アクティブモードのデフォルト高さ（50-200の中間値）
-          defaultInactiveFontSize: 12  // 非アクティブモードのデフォルトフォントサイズ（8-20の中間値）
+          defaultInactiveFontSize: 12,  // 非アクティブモードのデフォルトフォントサイズ（8-20の中間値）
+          newNoteHotkey: undefined  // 新規ノート作成ホットキー
         };
         console.log('[DEBUG] Settings file not found, creating default:', defaultSettings);
         await this.saveSettings(defaultSettings);
@@ -303,6 +304,7 @@ export class DataStore {
         searchHotkey: rawSettings.searchHotkey,
         pinHotkey: rawSettings.pinHotkey,
         lockHotkey: rawSettings.lockHotkey,
+        newNoteHotkey: rawSettings.newNoteHotkey,
         autoStart: rawSettings.autoStart ?? false
       };
       
@@ -323,7 +325,8 @@ export class DataStore {
         headerIconSize: 16,
         defaultInactiveWidth: 150,  // 50-300の中間値
         defaultInactiveHeight: 125,  // 50-200の中間値
-        defaultInactiveFontSize: 12  // 8-20の中間値
+        defaultInactiveFontSize: 12,  // 8-20の中間値
+        newNoteHotkey: undefined  // 新規ノート作成ホットキー
       };
       console.log('[DEBUG] Using fallback settings:', fallbackSettings);
       return fallbackSettings;

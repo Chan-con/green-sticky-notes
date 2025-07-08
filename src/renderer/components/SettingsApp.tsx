@@ -61,6 +61,9 @@ export const SettingsApp: React.FC = () => {
         if (window.electronAPI && window.electronAPI.getSettings) {
           const savedSettings = await window.electronAPI.getSettings();
           console.log('[DEBUG] Loaded settings from electron:', savedSettings);
+          console.log('[DEBUG] savedSettings.newNoteHotkey:', savedSettings.newNoteHotkey);
+          console.log('[DEBUG] Type of newNoteHotkey:', typeof savedSettings.newNoteHotkey);
+          console.log('[DEBUG] Is newNoteHotkey undefined?:', savedSettings.newNoteHotkey === undefined);
           
           // デフォルト値をマージして欠損したフィールドを補完
           console.log('[DEBUG] savedSettings.defaultInactiveWidth:', savedSettings.defaultInactiveWidth);
@@ -514,13 +517,13 @@ export const SettingsApp: React.FC = () => {
           </div>
           
           <div className="hotkey-setting">
-            <label>新規ノート作成:</label>
+            <label>新しい付箋追加:</label>
             <div className="hotkey-input-group">
               <input
                 type="text"
                 value={listeningFor === 'newNoteHotkey' 
                   ? (pressedKeys.size > 0 ? Array.from(pressedKeys).join('+') : 'キーを押してください...') 
-                  : settings.newNoteHotkey}
+                  : (settings.newNoteHotkey || '')}
                 readOnly
                 onClick={() => startListening('newNoteHotkey')}
                 placeholder="クリックしてキーを設定"

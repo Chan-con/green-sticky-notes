@@ -747,6 +747,7 @@ class StickyNotesApp {
         searchHotkey: settings.searchHotkey || '',
         pinHotkey: settings.pinHotkey || '',
         lockHotkey: settings.lockHotkey || '',
+        newNoteHotkey: settings.newNoteHotkey || '',
         headerIconSize: settings.headerIconSize || 16,
         defaultInactiveWidth: settings.defaultInactiveWidth || 150,
         defaultInactiveHeight: settings.defaultInactiveHeight || 125,
@@ -1275,6 +1276,11 @@ class StickyNotesApp {
     try {
       const registrationErrors: string[] = [];
       
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DEBUG] registerHotkeys - settings:', settings);
+        console.log('[DEBUG] registerHotkeys - newNoteHotkey:', settings.newNoteHotkey);
+      }
+      
       // 重複チェック
       const hotkeys = [
         settings.showAllHotkey?.trim(),
@@ -1382,6 +1388,10 @@ class StickyNotesApp {
       if (settings.newNoteHotkey && settings.newNoteHotkey.trim()) {
         const hotkey = settings.newNoteHotkey.trim();
         
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[DEBUG] Registering new note hotkey: "${hotkey}"`);
+        }
+        
         // 既に登録されているかチェック
         if (globalShortcut.isRegistered(hotkey)) {
           if (process.env.NODE_ENV === 'development') {
@@ -1407,6 +1417,10 @@ class StickyNotesApp {
             console.error(`Failed to register new note hotkey: ${hotkey}`);
             registrationErrors.push(`新規付箋ホットキー "${hotkey}" の登録に失敗しました`);
           }
+        }
+      } else {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[DEBUG] No new note hotkey configured (value: "${settings.newNoteHotkey}")`);
         }
       }
 
