@@ -19,7 +19,7 @@ html, body {
   width: 100%;
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--green-primary);
+  background: transparent;
   overflow: hidden;
 }
 
@@ -55,7 +55,6 @@ html, body {
   justify-content: space-between;
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.3);
-  border-bottom: 1px solid var(--border-color);
   cursor: move;
   -webkit-app-region: drag;
 }
@@ -130,17 +129,18 @@ html, body {
   width: 6px;
 }
 
+
 .note-content::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .note-content::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: rgba(255, 255, 255, 0.5);
   border-radius: 3px;
 }
 
 .note-content::-webkit-scrollbar-thumb:hover {
-  background: var(--green-dark);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .color-picker-popup {
@@ -218,12 +218,12 @@ html, body {
 }
 
 .font-size-popup::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: rgba(255, 255, 255, 0.5);
   border-radius: 3px;
 }
 
 .font-size-popup::-webkit-scrollbar-thumb:hover {
-  background: var(--green-dark);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .anchor-popup {

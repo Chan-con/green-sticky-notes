@@ -82,14 +82,22 @@ export const StickyNoteApp: React.FC = () => {
     
     // キーボードイベントハンドラー
     const handleKeyDown = (event: KeyboardEvent) => {
-      // ESC２回連続でアクティブモード終了
-      if (event.key === 'Escape' && isActive && note) {
+      // ESC２回連続でアクティブモード終了（ロックされていない場合のみ）
+      if (event.key === 'Escape' && isActive && note && !note.isLocked) {
         const currentTime = Date.now();
         const timeSinceLastEsc = currentTime - lastEscPressRef.current;
         
         if (timeSinceLastEsc <= 500) {
           // 500ms以内の２回目のESC押下：非アクティブモードに切り替え
           event.preventDefault();
+          
+          // 空の付箋は削除
+          const isEmpty = !getContentAsString(note.content).trim();
+          if (isEmpty) {
+            window.electronAPI.deleteNote(note.id);
+            return;
+          }
+          
           setIsActive(false);
           window.electronAPI.setNoteActive(note.id, false);
           lastEscPressRef.current = 0; // リセット
@@ -120,8 +128,7 @@ export const StickyNoteApp: React.FC = () => {
       // ピン留めショートカットキー
       if (settings.pinHotkey && keyCombo === settings.pinHotkey) {
         event.preventDefault();
-        const newPinnedState = !note.isPinned;
-        updateNoteSetting({ isPinned: newPinnedState });
+        togglePin();
         return;
       }
 
@@ -205,8 +212,115 @@ export const StickyNoteApp: React.FC = () => {
   useEffect(() => {
     if (note) {
       document.body.style.backgroundColor = note.backgroundColor;
+      
+      // ヘッダーの色を取得（カスタム色または自動生成色）
+      let headerColor = note.headerColor;
+      if (!headerColor) {
+        // ヘッダー色が設定されていない場合はデフォルトの半透明白
+        headerColor = 'rgba(255, 255, 255, 0.3)';
+      }
+      
+      // RGB値を抽出してアルファ値を調整した色を生成
+      let scrollbarColor = headerColor;
+      let scrollbarHoverColor = headerColor;
+      let popupBackgroundColor = 'rgba(255, 255, 255, 0.95)';
+      let popupHoverColor = 'rgba(240, 240, 240, 0.95)';
+      
+      // ヘッダー色がHEX形式の場合、rgba形式に変換してアルファ値を調整
+      if (headerColor.startsWith('#')) {
+        const r = parseInt(headerColor.slice(1, 3), 16);
+        const g = parseInt(headerColor.slice(3, 5), 16);
+        const b = parseInt(headerColor.slice(5, 7), 16);
+        scrollbarColor = `rgba(${r}, ${g}, ${b}, 0.6)`;
+        scrollbarHoverColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
+        // 白ベース + ヘッダー色を8%混ぜた背景色
+        const mixedR = Math.round(255 * 0.92 + r * 0.08);
+        const mixedG = Math.round(255 * 0.92 + g * 0.08);
+        const mixedB = Math.round(255 * 0.92 + b * 0.08);
+        popupBackgroundColor = `rgba(${mixedR}, ${mixedG}, ${mixedB}, 0.95)`;
+        // ホバー時は少し濃く
+        const hoverR = Math.round(240 * 0.85 + r * 0.15);
+        const hoverG = Math.round(240 * 0.85 + g * 0.15);
+        const hoverB = Math.round(240 * 0.85 + b * 0.15);
+        popupHoverColor = `rgba(${hoverR}, ${hoverG}, ${hoverB}, 0.95)`;
+      } else if (headerColor.startsWith('rgba')) {
+        // すでにrgba形式の場合、アルファ値を調整
+        const match = headerColor.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+        if (match) {
+          const [, r, g, b] = match;
+          scrollbarColor = `rgba(${r}, ${g}, ${b}, 0.6)`;
+          scrollbarHoverColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
+          // 白ベース + ヘッダー色を8%混ぜた背景色
+          const mixedR = Math.round(255 * 0.92 + parseInt(r) * 0.08);
+          const mixedG = Math.round(255 * 0.92 + parseInt(g) * 0.08);
+          const mixedB = Math.round(255 * 0.92 + parseInt(b) * 0.08);
+          popupBackgroundColor = `rgba(${mixedR}, ${mixedG}, ${mixedB}, 0.95)`;
+          // ホバー時は少し濃く
+          const hoverR = Math.round(240 * 0.85 + parseInt(r) * 0.15);
+          const hoverG = Math.round(240 * 0.85 + parseInt(g) * 0.15);
+          const hoverB = Math.round(240 * 0.85 + parseInt(b) * 0.15);
+          popupHoverColor = `rgba(${hoverR}, ${hoverG}, ${hoverB}, 0.95)`;
+        }
+      }
+      
+      // 既存のスタイルタグがあれば削除
+      const existingStyle = document.getElementById('scrollbar-style');
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+      
+      // 新しいスタイルタグを追加
+      const style = document.createElement('style');
+      style.id = 'scrollbar-style';
+      style.textContent = `
+        .note-content {
+          scrollbar-gutter: stable;
+        }
+        .note-content::-webkit-scrollbar {
+          width: 6px;
+          position: absolute;
+        }
+        .note-content::-webkit-scrollbar-thumb {
+          background: ${scrollbarColor} !important;
+        }
+        .note-content::-webkit-scrollbar-thumb:hover {
+          background: ${scrollbarHoverColor} !important;
+        }
+        .font-size-popup::-webkit-scrollbar-thumb {
+          background: ${scrollbarColor} !important;
+        }
+        .font-size-popup::-webkit-scrollbar-thumb:hover {
+          background: ${scrollbarHoverColor} !important;
+        }
+        .color-picker-popup {
+          background: ${popupBackgroundColor} !important;
+          border: 1px solid ${headerColor || 'rgba(255, 255, 255, 0.3)'} !important;
+        }
+        .color-picker-popup::-webkit-scrollbar {
+          width: 6px;
+        }
+        .color-picker-popup::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .color-picker-popup::-webkit-scrollbar-thumb {
+          background: ${scrollbarColor} !important;
+          border-radius: 3px;
+        }
+        .color-picker-popup::-webkit-scrollbar-thumb:hover {
+          background: ${scrollbarHoverColor} !important;
+        }
+        .font-size-popup {
+          background: ${popupBackgroundColor} !important;
+          border: 1px solid ${headerColor || 'rgba(255, 255, 255, 0.3)'} !important;
+        }
+        .font-size-option.selected,
+        .font-size-option:hover {
+          background: ${popupHoverColor} !important;
+        }
+      `;
+      document.head.appendChild(style);
     }
-  }, [note?.backgroundColor]);
+  }, [note?.backgroundColor, note?.headerColor]);
 
   const updateNoteContent = (content: string) => {
     if (!note) return;
