@@ -9,7 +9,7 @@ export interface WindowState {
 
 export class WindowStateManager {
   private windowStates: Map<string, WindowState> = new Map();
-  private readonly TRANSITION_COOLDOWN = 300; // ms
+  private readonly TRANSITION_COOLDOWN = 100; // ms
 
   /**
    * ウィンドウ状態を登録

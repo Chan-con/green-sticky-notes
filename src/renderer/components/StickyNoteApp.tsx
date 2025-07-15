@@ -9,6 +9,7 @@ export const StickyNoteApp: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [renderKey, setRenderKey] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const lastEscPressRef = useRef<number>(0);
@@ -82,29 +83,24 @@ export const StickyNoteApp: React.FC = () => {
     
     // キーボードイベントハンドラー
     const handleKeyDown = (event: KeyboardEvent) => {
-      // ESC２回連続でアクティブモード終了（ロックされていない場合のみ）
+      // ESC１回でアクティブモード終了（ロックされていない場合のみ）
       if (event.key === 'Escape' && isActive && note && !note.isLocked) {
-        const currentTime = Date.now();
-        const timeSinceLastEsc = currentTime - lastEscPressRef.current;
+        event.preventDefault();
         
-        if (timeSinceLastEsc <= 500) {
-          // 500ms以内の２回目のESC押下：非アクティブモードに切り替え
-          event.preventDefault();
-          
-          // 空の付箋は削除
-          const isEmpty = !getContentAsString(note.content).trim();
-          if (isEmpty) {
-            window.electronAPI.deleteNote(note.id);
-            return;
-          }
-          
-          setIsActive(false);
-          window.electronAPI.setNoteActive(note.id, false);
-          lastEscPressRef.current = 0; // リセット
-        } else {
-          // 初回のESC押下：タイムスタンプを記録
-          lastEscPressRef.current = currentTime;
+        // 空の付箋は削除
+        const isEmpty = !getContentAsString(note.content).trim();
+        if (isEmpty) {
+          window.electronAPI.deleteNote(note.id);
+          return;
         }
+        
+        // 状態変更を同期的に実行
+        setIsTransitioning(true);
+        window.electronAPI.setNoteActive(note.id, false).then(() => {
+          // バックエンドの状態変更完了後にUIを更新
+          setIsActive(false);
+          setIsTransitioning(false);
+        });
         return;
       }
 
@@ -344,11 +340,12 @@ export const StickyNoteApp: React.FC = () => {
     await window.electronAPI.updateNote(note.id, updates);
   };
 
-  const handleNoteClick = () => {
-    if (!isActive && note) {
+  const handleNoteClick = async () => {
+    if (!isActive && note && !isTransitioning) {
+      setIsTransitioning(true);
+      await window.electronAPI.setNoteActive(note.id, true);
       setIsActive(true);
-      // setNoteActive で状態更新も同時に行うので、updateNote は不要
-      window.electronAPI.setNoteActive(note.id, true);
+      setIsTransitioning(false);
       
       setTimeout(() => {
         contentRef.current?.focus();
@@ -377,7 +374,7 @@ export const StickyNoteApp: React.FC = () => {
       }
       
       // デバウンスでブラー処理を実行
-      blurTimeoutRef.current = setTimeout(() => {
+      blurTimeoutRef.current = setTimeout(async () => {
         const isEmpty = !getContentAsString(note.content).trim();
         
         if (isEmpty) {
@@ -385,9 +382,12 @@ export const StickyNoteApp: React.FC = () => {
           return;
         }
 
+        // 状態変更を同期的に実行
+        setIsTransitioning(true);
+        await window.electronAPI.setNoteActive(note.id, false);
+        // バックエンドの状態変更完了後にUIを更新
         setIsActive(false);
-        // setNoteActive で状態更新も同時に行うので、updateNote は不要
-        window.electronAPI.setNoteActive(note.id, false);
+        setIsTransitioning(false);
       }, 150); // ブラーイベントのデバウンス
     }
   };
@@ -420,9 +420,9 @@ export const StickyNoteApp: React.FC = () => {
 
   return (
     <div 
-      className={`sticky-note ${isActive ? 'active-mode' : 'stay-mode'}`}
+      className={`sticky-note ${isActive ? 'active-mode' : 'stay-mode'} ${isTransitioning ? 'transitioning' : ''}`}
       style={{ backgroundColor: note.backgroundColor }}
-      onClick={!isActive ? handleNoteClick : undefined}
+      onClick={!isActive && !isTransitioning ? handleNoteClick : undefined}
     >
       <NoteHeader
         key={`header-${renderKey}-${isActive ? 'active' : 'inactive'}-${settings?.headerIconSize ?? 16}`}

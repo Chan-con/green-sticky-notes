@@ -57,6 +57,7 @@ html, body {
   background: rgba(255, 255, 255, 0.3);
   cursor: move;
   -webkit-app-region: drag;
+  z-index: 10;
 }
 
 .note-header.hidden {
@@ -82,6 +83,8 @@ html, body {
   justify-content: center;
   font-size: 12px;
   transition: background-color 0.2s;
+  position: relative;
+  z-index: 20;
 }
 
 .menu-button:hover {
@@ -150,7 +153,7 @@ html, body {
   border-radius: 8px;
   padding: 8px;
   box-shadow: var(--shadow);
-  z-index: 1000;
+  z-index: 1100;
   max-width: calc(100vw - 20px);
   max-height: calc(100vh - 50px);
   overflow-y: auto;
@@ -187,7 +190,7 @@ html, body {
   border-radius: 8px;
   padding: 6px;
   box-shadow: var(--shadow);
-  z-index: 1000;
+  z-index: 1100;
   max-height: calc(100vh - 50px);
   max-width: calc(100vw - 20px);
   overflow-y: auto;

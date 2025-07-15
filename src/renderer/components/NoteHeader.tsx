@@ -52,6 +52,13 @@ const colorOptions = [
 
 const fontSizes = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 48];
 
+interface PopupPosition {
+  top: number;
+  left: number;
+  maxWidth?: number;
+  maxHeight?: number;
+}
+
 // 色の自動調整ユーティリティ関数
 const hexToHsl = (hex: string): [number, number, number] => {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -144,7 +151,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
 }) => {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontSizePicker, setShowFontSizePicker] = useState(false);
-  const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 });
+  const [popupPosition, setPopupPosition] = useState<PopupPosition>({ top: 0, left: 0 });
   const colorButtonRef = useRef<HTMLButtonElement>(null);
   const fontButtonRef = useRef<HTMLButtonElement>(null);
   
@@ -220,18 +227,26 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
     action();
   };
 
-  const calculatePopupPosition = (buttonRef: React.RefObject<HTMLButtonElement>) => {
+  const calculatePopupPosition = (buttonRef: React.RefObject<HTMLButtonElement>): PopupPosition => {
     if (!buttonRef.current) return { top: 0, left: 0 };
     
     const buttonRect = buttonRef.current.getBoundingClientRect();
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     
-    // ポップアップの推定サイズ
-    const popupWidth = 220;
-    const popupHeight = 200;
+    // ヘッダーエリアを取得（note-headerクラスの要素）
+    const headerElement = buttonRef.current.closest('.note-header');
+    const headerRect = headerElement ? headerElement.getBoundingClientRect() : null;
     
-    let top = buttonRect.bottom + 5;
+    // ポップアップの推定サイズ（縦に細いウィンドウの場合は動的調整）
+    const popupWidth = Math.min(220, windowWidth - 20);
+    const popupHeight = Math.min(200, windowHeight * 0.6); // 画面の60%まで
+    
+    // 利用可能な垂直スペースを計算
+    const spaceBelow = headerRect ? windowHeight - headerRect.bottom : windowHeight - buttonRect.bottom;
+    const spaceAbove = headerRect ? headerRect.top : buttonRect.top;
+    
+    let top = 0;
     let left = buttonRect.left;
     
     // 右端を超える場合は左寄せ
@@ -239,35 +254,80 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
       left = Math.max(5, windowWidth - popupWidth - 5);
     }
     
-    // 下端を超える場合は上に表示
-    if (top + popupHeight > windowHeight) {
-      top = Math.max(5, buttonRect.top - popupHeight - 5);
+    // 縦に細いウィンドウの場合の特別処理
+    if (windowHeight < 300 || (headerRect && spaceBelow < 100 && spaceAbove < 100)) {
+      // 非常に小さいウィンドウの場合でも、必ずヘッダーの下に配置
+      top = headerRect ? headerRect.bottom + 5 : buttonRect.bottom + 5;
+      left = 5;
+      // この場合はポップアップサイズを更に小さくする
+      const availableHeight = windowHeight - top - 20;
+      return { 
+        top, 
+        left,
+        maxWidth: windowWidth - 20,
+        maxHeight: Math.max(50, availableHeight) // 最低50pxは確保
+      };
     }
     
-    // ボタンと重なる場合の回避処理
-    if (top < buttonRect.bottom && top + popupHeight > buttonRect.top) {
-      // 下側にスペースがある場合
-      if (buttonRect.bottom + popupHeight <= windowHeight) {
-        top = buttonRect.bottom + 5;
+    // 位置計算の優先順位を明確化
+    // 1. まずヘッダーの下に配置を試す
+    if (headerRect && spaceBelow >= popupHeight + 15) {
+      top = headerRect.bottom + 10;
+    }
+    // 2. 下に配置できない場合は上に配置を試す
+    else if (headerRect && spaceAbove >= popupHeight + 15) {
+      top = headerRect.top - popupHeight - 10;
+    }
+    // 3. 両方に配置できない場合は左右に配置を試す
+    else if (headerRect) {
+      // 右側に表示を試す
+      if (headerRect.right + popupWidth + 15 <= windowWidth) {
+        top = headerRect.top;
+        left = headerRect.right + 10;
       } 
-      // 上側にスペースがある場合
-      else if (buttonRect.top - popupHeight >= 0) {
-        top = buttonRect.top - popupHeight - 5;
+      // 左側に表示を試す
+      else if (headerRect.left - popupWidth - 15 >= 0) {
+        top = headerRect.top;
+        left = headerRect.left - popupWidth - 10;
       }
-      // どちらもだめな場合は右側に表示
+      // どちらもだめな場合は強制的に下に配置（画面を超えても）
       else {
-        top = buttonRect.top;
-        left = buttonRect.right + 5;
-        // 右側も画面を超える場合は左側に
-        if (left + popupWidth > windowWidth) {
-          left = Math.max(5, buttonRect.left - popupWidth - 5);
-        }
+        top = headerRect.bottom + 10;
       }
     }
+    // 4. ヘッダーがない場合（フォールバック）
+    else {
+      top = buttonRect.bottom + 10;
+    }
     
-    // 最小位置制限
-    top = Math.max(5, top);
+    // 最小位置制限（ただし、ヘッダーとの重なりを考慮）
+    if (headerRect) {
+      // ヘッダーと重なる場合の最小位置は、ヘッダーの下
+      const minTop = headerRect.bottom + 5;
+      if (top < minTop) {
+        top = minTop;
+      }
+    } else {
+      top = Math.max(5, top);
+    }
     left = Math.max(5, left);
+    
+    // 画面を超える場合の最終調整（但し、ヘッダーとの重なりを防ぐ）
+    if (top + popupHeight > windowHeight) {
+      const adjustedTop = Math.max(5, windowHeight - popupHeight - 5);
+      // 調整後の位置がヘッダーと重なるかチェック
+      if (headerRect && adjustedTop < headerRect.bottom) {
+        // 重なる場合は、ヘッダーの下に配置し、高さを調整
+        top = headerRect.bottom + 5;
+        return {
+          top,
+          left,
+          maxHeight: windowHeight - top - 10
+        };
+      } else {
+        top = adjustedTop;
+      }
+    }
     
     return { top, left };
   };
@@ -416,7 +476,12 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
         <div 
           ref={colorPickerRef}
           className="color-picker-popup" 
-          style={{ top: `${popupPosition.top}px`, left: `${popupPosition.left}px` }}
+          style={{ 
+            top: `${popupPosition.top}px`, 
+            left: `${popupPosition.left}px`,
+            ...(popupPosition.maxWidth && { maxWidth: `${popupPosition.maxWidth}px` }),
+            ...(popupPosition.maxHeight && { maxHeight: `${popupPosition.maxHeight}px` })
+          }}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -491,7 +556,12 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
         <div 
           ref={fontSizePickerRef}
           className="font-size-popup" 
-          style={{ top: `${popupPosition.top}px`, left: `${popupPosition.left}px` }}
+          style={{ 
+            top: `${popupPosition.top}px`, 
+            left: `${popupPosition.left}px`,
+            ...(popupPosition.maxWidth && { maxWidth: `${popupPosition.maxWidth}px` }),
+            ...(popupPosition.maxHeight && { maxHeight: `${popupPosition.maxHeight}px` })
+          }}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
