@@ -7,11 +7,26 @@ export class DataStore {
   private dataPath: string;
   private notesFile: string;
   private settingsFile: string;
+  private backupPath: string;
+  private legacyDataPaths: string[];
 
   constructor() {
     this.dataPath = path.join(app.getPath('userData'), 'sticky-notes-data');
     this.notesFile = path.join(this.dataPath, 'notes.json');
     this.settingsFile = path.join(this.dataPath, 'settings.json');
+    this.backupPath = path.join(this.dataPath, 'backups');
+    
+    // レガシーデータのパス（過去のバージョンで使用されていた可能性がある場所）
+    this.legacyDataPaths = [
+      // アプリケーション名変更前
+      path.join(app.getPath('userData'), '..', 'Sticky Notes'),
+      path.join(app.getPath('userData'), '..', 'Green Sticky Notes'),
+      // サブディレクトリなしの直接配置
+      app.getPath('userData'),
+      // 他の可能性のある場所
+      path.join(app.getPath('appData'), 'Sticky Notes'),
+      path.join(app.getPath('appData'), 'Green Sticky Notes'),
+    ];
     
     // デバッグ情報をログ出力
     if (process.env.NODE_ENV === 'development') {
@@ -20,16 +35,95 @@ export class DataStore {
       console.log('Data directory:', this.dataPath);
       console.log('Notes file:', this.notesFile);
       console.log('Settings file:', this.settingsFile);
+      console.log('Backup path:', this.backupPath);
+      console.log('Legacy paths:', this.legacyDataPaths);
       console.log('============================');
     }
     
     this.ensureDataDirectory();
+    this.migrateFromLegacyLocations();
   }
 
   private ensureDataDirectory() {
     if (!fs.existsSync(this.dataPath)) {
       fs.mkdirSync(this.dataPath, { recursive: true });
     }
+    if (!fs.existsSync(this.backupPath)) {
+      fs.mkdirSync(this.backupPath, { recursive: true });
+    }
+  }
+
+  /**
+   * 過去のバージョンからのデータ移行を試行
+   */
+  private migrateFromLegacyLocations() {
+    try {
+      // 現在の場所にデータが既にある場合はスキップ
+      if (fs.existsSync(this.notesFile) && fs.existsSync(this.settingsFile)) {
+        console.log('Current data files exist, skipping migration');
+        return;
+      }
+
+      console.log('Attempting to migrate data from legacy locations...');
+      
+      // notes.jsonの移行
+      if (!fs.existsSync(this.notesFile)) {
+        const legacyNotesFile = this.findLegacyFile('notes.json');
+        if (legacyNotesFile) {
+          try {
+            fs.copyFileSync(legacyNotesFile, this.notesFile);
+            console.log(`Successfully migrated notes from: ${legacyNotesFile}`);
+          } catch (error) {
+            console.error(`Failed to migrate notes from ${legacyNotesFile}:`, error);
+          }
+        }
+      }
+
+      // settings.jsonの移行
+      if (!fs.existsSync(this.settingsFile)) {
+        const legacySettingsFile = this.findLegacyFile('settings.json');
+        if (legacySettingsFile) {
+          try {
+            fs.copyFileSync(legacySettingsFile, this.settingsFile);
+            console.log(`Successfully migrated settings from: ${legacySettingsFile}`);
+          } catch (error) {
+            console.error(`Failed to migrate settings from ${legacySettingsFile}:`, error);
+          }
+        }
+      }
+
+      // 移行後の検証
+      if (fs.existsSync(this.notesFile) || fs.existsSync(this.settingsFile)) {
+        console.log('Data migration completed successfully');
+      } else {
+        console.log('No legacy data found to migrate');
+      }
+
+    } catch (error) {
+      console.error('Error during data migration:', error);
+    }
+  }
+
+  /**
+   * レガシーファイルの場所を検索
+   */
+  private findLegacyFile(filename: string): string | null {
+    for (const legacyPath of this.legacyDataPaths) {
+      const filePath = path.join(legacyPath, filename);
+      if (fs.existsSync(filePath)) {
+        console.log(`Found legacy file: ${filePath}`);
+        return filePath;
+      }
+    }
+
+    // 直接userDataディレクトリにある場合もチェック
+    const directPath = path.join(app.getPath('userData'), filename);
+    if (fs.existsSync(directPath)) {
+      console.log(`Found legacy file in userData: ${directPath}`);
+      return directPath;
+    }
+
+    return null;
   }
 
   async getAllNotes(): Promise<StickyNote[]> {
