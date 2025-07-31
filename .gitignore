@@ -3,11 +3,16 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
 
 # Build outputs
 dist/
 build/
 out/
+release/
+app/
+*.tgz
+*.tar.gz
 
 # Environment variables
 .env
@@ -24,17 +29,30 @@ out/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
 
 # IDE/Editor files
-.vscode/
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
 .idea/
 *.swp
 *.swo
 *~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
 
 # Logs
 logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
 # Runtime data
 pids/
@@ -44,25 +62,77 @@ pids/
 
 # Coverage directory used by tools like istanbul
 coverage/
+*.lcov
+.nyc_output/
 
-# Electron specific
-app/
-release/
-*.dmg
+# Electron specific - build artifacts
 *.exe
+*.dmg
 *.deb
 *.rpm
 *.AppImage
+*.snap
+*.msi
+*.pkg
+*.blockmap
+# Exclude builder config files but keep package.json
+builder-*.yml
+latest.yml
 
-# Application data (sticky notes data)
+# Electron builder outputs
+dist_electron/
+release/
+app/
+
+# Application data
 sticky-notes-data/
+user-data/
+userData/
 
 # Temporary files
 tmp/
 temp/
 .tmp/
+.temp/
 squashfs-root/
+__pycache__/
 
-# Package-lock files (choose one based on your preference)
+# Cache directories
+.cache/
+.parcel-cache/
+.eslintcache
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# Webpack bundle analyzer
+bundle-report.html
+
+# Electron-forge
+.config/
+
+# Hot reload files
+*.hot-update.*
+
+# Package-lock files (uncomment if you want to ignore them)
+# Note: package-lock.json should generally be committed for consistent installs
 # package-lock.json
 # yarn.lock
+
+# Auto-generated files
+*.generated.*
