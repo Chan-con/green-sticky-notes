@@ -140,24 +140,48 @@ export const StickyNoteApp: React.FC = () => {
     // キーボードイベントリスナーを追加
     document.addEventListener('keydown', handleKeyDown);
     
-    // 定期的な自動保存（5秒間隔）
+    // 定期的な自動保存（3秒間隔、保存条件を緩和）
     const startAutoSave = () => {
       if (autoSaveIntervalRef.current) {
         clearInterval(autoSaveIntervalRef.current);
       }
-      autoSaveIntervalRef.current = setInterval(() => {
-        if (note && Date.now() - lastSaveRef.current > 4000) {
-          window.electronAPI.updateNote(note.id, { content: note.content });
-          lastSaveRef.current = Date.now();
+      autoSaveIntervalRef.current = setInterval(async () => {
+        if (note && Date.now() - lastSaveRef.current > 2000) {
+          try {
+            await window.electronAPI.updateNote(note.id, { content: note.content });
+            lastSaveRef.current = Date.now();
+          } catch (error) {
+            console.error('Auto-save failed:', error);
+            // 自動保存失敗時は次回の間隔を短くして再試行
+          }
         }
-      }, 5000);
+      }, 3000);
     };
 
     // 緊急保存ハンドラー
-    const emergencySave = () => {
-      if (note && saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        window.electronAPI.updateNote(note.id, { content: note.content });
+    const emergencySave = async () => {
+      if (note) {
+        // タイマーの有無に関係なく最新の状態を保存
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+        }
+        try {
+          await window.electronAPI.updateNote(note.id, { content: note.content });
+          lastSaveRef.current = Date.now();
+        } catch (error) {
+          console.error('Emergency save failed:', error);
+          // 緊急時は複数回試行
+          for (let i = 0; i < 3; i++) {
+            try {
+              await new Promise(resolve => setTimeout(resolve, 100 * (i + 1)));
+              await window.electronAPI.updateNote(note.id, { content: note.content });
+              console.log(`Emergency save succeeded on attempt ${i + 2}`);
+              break;
+            } catch (retryError) {
+              console.error(`Emergency save attempt ${i + 2} failed:`, retryError);
+            }
+          }
+        }
       }
     };
 
@@ -318,19 +342,34 @@ export const StickyNoteApp: React.FC = () => {
     }
   }, [note?.backgroundColor, note?.headerColor]);
 
-  const updateNoteContent = (content: string) => {
+  const updateNoteContent = async (content: string) => {
     if (!note) return;
 
     setNote(prev => prev ? { ...prev, content } : null);
 
+    // タイマーをクリア
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    saveTimeoutRef.current = setTimeout(() => {
-      window.electronAPI.updateNote(note.id, { content });
+    try {
+      // 即座に保存して競合状態を回避
+      await window.electronAPI.updateNote(note.id, { content });
       lastSaveRef.current = Date.now();
-    }, 100);
+    } catch (error) {
+      console.error('Failed to save note content:', error);
+      // ユーザーにエラーを通知（将来的にUIで表示可能）
+      // エラー時は再試行タイマーを設定
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          await window.electronAPI.updateNote(note.id, { content });
+          lastSaveRef.current = Date.now();
+          console.log('Retry save successful');
+        } catch (retryError) {
+          console.error('Retry save also failed:', retryError);
+        }
+      }, 1000);
+    }
   };
 
   const updateNoteSetting = async (updates: Partial<StickyNote>) => {

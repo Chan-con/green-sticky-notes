@@ -50,14 +50,34 @@ export class DataStore {
       
       return migratedNotes;
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error loading notes:', error);
-        console.error('Error details:', {
-          notesFile: this.notesFile,
-          fileExists: fs.existsSync(this.notesFile),
-          error: error instanceof Error ? error.message : error
-        });
+      console.error('Critical error loading notes:', error);
+      console.error('Error details:', {
+        notesFile: this.notesFile,
+        fileExists: fs.existsSync(this.notesFile),
+        error: error instanceof Error ? error.message : error
+      });
+      
+      // バックアップファイルからの復旧を試行
+      const backupFile = this.notesFile + '.backup';
+      if (fs.existsSync(backupFile)) {
+        try {
+          console.log('Attempting to restore from backup file...');
+          const backupData = fs.readFileSync(backupFile, 'utf8');
+          const backupNotes = JSON.parse(backupData);
+          console.log(`Restored ${backupNotes.length} notes from backup`);
+          return backupNotes.map((note: any) => this.migrateNoteFormat(note));
+        } catch (backupError) {
+          console.error('Failed to restore from backup:', backupError);
+        }
       }
+      
+      // 本番環境でも重要なエラーをログ出力
+      if (process.env.NODE_ENV === 'production') {
+        console.error('PRODUCTION ERROR: Notes file corruption detected. Please check data integrity.');
+      }
+      
+      // 空配列を返す前に警告
+      console.warn('Returning empty notes array due to file corruption. Data may be lost.');
       return [];
     }
   }
@@ -112,9 +132,15 @@ export class DataStore {
 
   private async saveNotesAtomic(notes: StickyNote[]): Promise<void> {
     const tempFile = this.notesFile + '.tmp';
+    const backupFile = this.notesFile + '.backup';
     const data = JSON.stringify(notes, null, 2);
     
     try {
+      // 既存ファイルが存在する場合、バックアップを作成
+      if (fs.existsSync(this.notesFile)) {
+        fs.copyFileSync(this.notesFile, backupFile);
+      }
+      
       // 一時ファイルに書き込み
       fs.writeFileSync(tempFile, data);
       
@@ -140,6 +166,18 @@ export class DataStore {
       if (fs.existsSync(tempFile)) {
         fs.unlinkSync(tempFile);
       }
+      
+      // バックアップからの復旧を試行
+      if (fs.existsSync(backupFile)) {
+        try {
+          console.log('Attempting to restore from backup after save failure...');
+          fs.copyFileSync(backupFile, this.notesFile);
+          console.log('Successfully restored from backup');
+        } catch (restoreError) {
+          console.error('Failed to restore from backup:', restoreError);
+        }
+      }
+      
       throw error;
     }
   }

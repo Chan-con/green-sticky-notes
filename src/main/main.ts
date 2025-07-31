@@ -529,15 +529,26 @@ class StickyNotesApp {
     });
 
     ipcMain.handle('update-note', async (_, noteId: string, updates: Partial<StickyNote>) => {
-      await this.dataStore.updateNote(noteId, updates);
-      
-      // 検索インデックスを更新
-      const updatedNote = await this.dataStore.getNote(noteId);
-      if (updatedNote) {
-        this.searchService.updateNoteInIndex(updatedNote);
+      try {
+        await this.dataStore.updateNote(noteId, updates);
+        
+        // 検索インデックスを更新
+        const updatedNote = await this.dataStore.getNote(noteId);
+        if (updatedNote) {
+          this.searchService.updateNoteInIndex(updatedNote);
+        }
+        
+        return true;
+      } catch (error) {
+        console.error(`Failed to update note ${noteId}:`, error);
+        // 本番環境でも重要なエラーをログ出力
+        if (process.env.NODE_ENV === 'production') {
+          console.error('PRODUCTION ERROR: Note update failed. Data may not be saved.');
+        }
+        
+        // エラーをレンダラープロセスに返す
+        throw new Error(`Failed to update note: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      
-      return true;
     });
 
     ipcMain.handle('delete-note', async (_, noteId: string) => {
