@@ -44,4 +44,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 contextBridge.exposeInMainWorld('electron', {
   showContextMenu: () => ipcRenderer.invoke('show-context-menu'),
+  showContextMenuWithUrl: (url: string | null) => ipcRenderer.invoke('show-context-menu-with-url', url),
 });

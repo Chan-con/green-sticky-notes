@@ -738,6 +738,71 @@ class StickyNotesApp {
       }
     });
 
+    // URLを含むコンテキストメニュー（新機能）
+    ipcMain.handle('show-context-menu-with-url', (event, url: string | null) => {
+      const menuTemplate: Electron.MenuItemConstructorOptions[] = [];
+      
+      // URLが検出された場合、URLを開くオプションを追加
+      if (url) {
+        menuTemplate.push(
+          {
+            label: `URLを開く: ${url.length > 30 ? url.substring(0, 27) + '...' : url}`,
+            click: async () => {
+              try {
+                await shell.openExternal(url);
+              } catch (error) {
+                console.error('Failed to open URL:', error);
+              }
+            }
+          },
+          { type: 'separator' }
+        );
+      }
+      
+      // 標準的なテキスト編集オプション
+      menuTemplate.push(
+        {
+          label: '元に戻す',
+          accelerator: 'Ctrl+Z',
+          role: 'undo'
+        },
+        {
+          label: 'やり直し',
+          accelerator: 'Ctrl+Y',
+          role: 'redo'
+        },
+        { type: 'separator' },
+        {
+          label: '切り取り',
+          accelerator: 'Ctrl+X',
+          role: 'cut'
+        },
+        {
+          label: 'コピー',
+          accelerator: 'Ctrl+C',
+          role: 'copy'
+        },
+        {
+          label: '貼り付け',
+          accelerator: 'Ctrl+V',
+          role: 'paste'
+        },
+        { type: 'separator' },
+        {
+          label: 'すべて選択',
+          accelerator: 'Ctrl+A',
+          role: 'selectAll'
+        }
+      );
+      
+      const contextMenu = Menu.buildFromTemplate(menuTemplate);
+      
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        contextMenu.popup({ window: win });
+      }
+    });
+
     ipcMain.handle('close-settings', () => {
       if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
         this.settingsWindow.close();

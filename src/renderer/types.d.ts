@@ -4,6 +4,7 @@ declare global {
   interface Window {
     electron: {
       showContextMenu: () => Promise<void>;
+      showContextMenuWithUrl: (url: string | null) => Promise<void>;
     };
     electronAPI: {
       onNoteData: (callback: (note: StickyNote) => void) => void;

@@ -29,22 +29,23 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
       return null;
     };
 
-    const handleDoubleClick = async (e: React.MouseEvent<HTMLTextAreaElement>) => {
-      if (!isActive) return;
-      
-      const textarea = e.currentTarget;
-      const position = textarea.selectionStart;
-      const text = textarea.value;
-      const url = detectUrlAtPosition(text, position);
-      
-      if (url && window.electronAPI?.openUrlInBrowser) {
-        try {
-          await window.electronAPI.openUrlInBrowser(url);
-        } catch (error) {
-          console.error('Failed to open URL:', error);
-        }
-      }
-    };
+    // ダブルクリック機能は無効化（コンテキストメニューからURLを開くように変更）
+    // const handleDoubleClick = async (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    //   if (!isActive) return;
+    //   
+    //   const textarea = e.currentTarget;
+    //   const position = textarea.selectionStart;
+    //   const text = textarea.value;
+    //   const url = detectUrlAtPosition(text, position);
+    //   
+    //   if (url && window.electronAPI?.openUrlInBrowser) {
+    //     try {
+    //       await window.electronAPI.openUrlInBrowser(url);
+    //     } catch (error) {
+    //       console.error('Failed to open URL:', error);
+    //     }
+    //   }
+    // };
 
 
 
@@ -60,8 +61,20 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
 
     const handleContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
       e.preventDefault();
-      // ElectronのIPCを通じてコンテキストメニューを表示
-      window.electron.showContextMenu();
+      
+      if (!isActive) {
+        // 非アクティブモードでは通常のコンテキストメニューのみ
+        window.electron.showContextMenu();
+        return;
+      }
+      
+      const textarea = e.currentTarget;
+      const position = textarea.selectionStart;
+      const text = textarea.value;
+      const url = detectUrlAtPosition(text, position);
+      
+      // カーソル位置のURLとともにコンテキストメニューを表示
+      window.electron.showContextMenuWithUrl(url);
     };
 
     const truncateText = (text: string, maxLength: number = 50): string => {
@@ -88,7 +101,6 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
           onChange={handleChange}
           onBlur={onBlur}
           onContextMenu={handleContextMenu}
-          onDoubleClick={handleDoubleClick}
           placeholder="付箋の内容を入力..."
           style={{ fontSize: `${note.fontSize}px` }}
         />
