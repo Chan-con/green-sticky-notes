@@ -145,7 +145,17 @@ class StickyNotesApp {
     }
 
     win.webContents.once('did-finish-load', () => {
-      win.webContents.send('note-data', note);
+      // レンダラープロセスの初期化を確実にするため少し待つ
+      setTimeout(() => {
+        win.webContents.send('note-data', note);
+      }, 100);
+    });
+
+    // DOM準備完了時にも送信（バックアップ）
+    win.webContents.once('dom-ready', () => {
+      setTimeout(() => {
+        win.webContents.send('note-data', note);
+      }, 200);
     });
 
     // 開発者ツールのショートカットキーをブロック

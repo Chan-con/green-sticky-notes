@@ -10,6 +10,8 @@ export const StickyNoteApp: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [renderKey, setRenderKey] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const lastEscPressRef = useRef<number>(0);
@@ -19,6 +21,14 @@ export const StickyNoteApp: React.FC = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const noteId = urlParams.get('noteId');
+    
+    // タイムアウト設定（5秒でエラー表示）
+    const loadingTimeout = setTimeout(() => {
+      if (!note) {
+        setLoadingError('ノートの読み込みに時間がかかっています。ウィンドウを閉じて再度開いてください。');
+        setIsLoading(false);
+      }
+    }, 5000);
     
     // 設定を読み込み
     const loadSettings = async () => {
@@ -51,6 +61,8 @@ export const StickyNoteApp: React.FC = () => {
       if (!noteId || noteData.id === noteId) {
         setNote(noteData);
         setIsActive(noteData.isActive);
+        setIsLoading(false);
+        clearTimeout(loadingTimeout);
       }
     });
 
@@ -213,6 +225,7 @@ export const StickyNoteApp: React.FC = () => {
     
     // クリーンアップ: タイムアウトとイベントリスナーをクリア
     return () => {
+      clearTimeout(loadingTimeout);
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
@@ -453,8 +466,37 @@ export const StickyNoteApp: React.FC = () => {
     await updateNoteSetting({ isLocked: newLockState });
   };
 
-  if (!note) {
-    return <div>Loading...</div>;
+  if (loadingError) {
+    return (
+      <div style={{ 
+        padding: '20px', 
+        backgroundColor: '#ffebee', 
+        border: '1px solid #f44336',
+        borderRadius: '4px',
+        fontSize: '12px',
+        color: '#d32f2f',
+        maxWidth: '250px',
+        wordBreak: 'break-word'
+      }}>
+        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>読み込みエラー</div>
+        <div>{loadingError}</div>
+      </div>
+    );
+  }
+
+  if (!note || isLoading) {
+    return (
+      <div style={{ 
+        padding: '20px', 
+        backgroundColor: '#f5f5f5',
+        borderRadius: '4px',
+        fontSize: '12px',
+        color: '#666',
+        textAlign: 'center'
+      }}>
+        Loading...
+      </div>
+    );
   }
 
   return (
