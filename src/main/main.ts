@@ -273,7 +273,24 @@ class StickyNotesApp {
       return { display: savedDisplay, shouldMigrate: false };
     }
     
-    // ディスプレイがない場合はプライマリディスプレイに移動
+    // ディスプレイIDが変わった場合でも、座標が有効な範囲内にあるかチェック
+    const x = isActive ? note.activeX : note.inactiveX;
+    const y = isActive ? note.activeY : note.inactiveY;
+    
+    if (typeof x === 'number' && typeof y === 'number') {
+      // 座標がどのディスプレイ範囲内にあるかチェック
+      const containingDisplay = displays.find(display => {
+        const bounds = display.bounds;
+        return x >= bounds.x && x < bounds.x + bounds.width &&
+               y >= bounds.y && y < bounds.y + bounds.height;
+      });
+      
+      if (containingDisplay) {
+        return { display: containingDisplay, shouldMigrate: false };
+      }
+    }
+    
+    // ディスプレイもなく座標も無効な場合のみプライマリディスプレイに移動
     return { display: screen.getPrimaryDisplay(), shouldMigrate: true };
   }
 
