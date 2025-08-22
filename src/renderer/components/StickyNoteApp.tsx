@@ -77,6 +77,18 @@ export const StickyNoteApp: React.FC = () => {
       // 強制再レンダリングと状態リセット
       setRenderKey(prev => prev + 1);
       
+      // アクティブ化された場合にエディタにフォーカスを設定
+      if (activeState) {
+        setTimeout(() => {
+          if (contentRef.current) {
+            contentRef.current.focus();
+            // カーソルを末尾に移動
+            const textLength = contentRef.current.value.length;
+            contentRef.current.setSelectionRange(textLength, textLength);
+          }
+        }, 150); // UI更新完了後にフォーカス
+      }
+      
       // 短時間後にトランジション状態をクリア
       setTimeout(() => {
         setIsTransitioning(false);
