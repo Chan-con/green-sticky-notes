@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportNotesToTxt: () => ipcRenderer.invoke('export-notes-to-txt'),
   selectFolderAndExportNotes: () => ipcRenderer.invoke('select-folder-and-export-notes'),
   openUrlInBrowser: (url: string) => ipcRenderer.invoke('open-url-in-browser', url),
+  arrangeAllNotes: () => ipcRenderer.invoke('arrange-all-notes'),
   
   // 検索関連のメソッド
   searchNotes: (query: SearchQuery) => ipcRenderer.invoke('search-notes', query),

@@ -50,6 +50,7 @@ export const SettingsApp: React.FC = () => {
   const [isClosingSafely, setIsClosingSafely] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [isArranging, setIsArranging] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout>();
   const isClosingSafelyRef = useRef(false);
   const originalSettingsRef = useRef<SettingsState>(originalSettings);
@@ -319,6 +320,39 @@ export const SettingsApp: React.FC = () => {
     } finally {
       console.log('[DEBUG] Setting isExporting to false');
       setIsExporting(false);
+    }
+  };
+
+  const handleArrangeAllNotes = async () => {
+    console.log('[DEBUG] handleArrangeAllNotes called');
+    try {
+      setIsArranging(true);
+      setErrorMessage('');
+      
+      console.log('[DEBUG] window.electronAPI exists:', !!window.electronAPI);
+      
+      if (window.electronAPI && window.electronAPI.arrangeAllNotes) {
+        console.log('[DEBUG] Calling arrangeAllNotes...');
+        const result = await window.electronAPI.arrangeAllNotes();
+        console.log('[DEBUG] Arrange result:', result);
+        
+        if (result && result.success) {
+          console.log(`Arrange successful: ${result.movedCount} notes arranged`);
+          // 成功メッセージを表示（オプション）
+        } else {
+          console.error('[DEBUG] Arrange failed:', result?.error);
+          setErrorMessage(result?.error || '付箋の整列に失敗しました');
+        }
+      } else {
+        console.error('[DEBUG] electronAPI or arrangeAllNotes not available');
+        setErrorMessage('付箋整列機能が利用できません');
+      }
+    } catch (error) {
+      console.error('[DEBUG] Arrange error:', error);
+      setErrorMessage('付箋整列中にエラーが発生しました');
+    } finally {
+      console.log('[DEBUG] Setting isArranging to false');
+      setIsArranging(false);
     }
   };
 
@@ -695,6 +729,23 @@ export const SettingsApp: React.FC = () => {
               >
                 {isExporting ? 'エクスポート中...' : '.txtファイルで出力'}
               </button>
+            </div>
+          </div>
+          
+          <div className="setting-row">
+            <label>付箋の整理:</label>
+            <div className="arrange-group">
+              <button 
+                type="button" 
+                onClick={handleArrangeAllNotes}
+                disabled={isArranging}
+                className="arrange-button"
+              >
+                {isArranging ? '整列中...' : 'すべての付箋を集める'}
+              </button>
+              <p className="arrange-description">
+                すべての付箋をプライマリディスプレイに整列して表示します
+              </p>
             </div>
           </div>
           

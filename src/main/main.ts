@@ -420,71 +420,75 @@ class StickyNotesApp {
 
 
   private async handleDisplayChange() {
+    console.log('[DEBUG] Display change detected');
     const displays = screen.getAllDisplays();
     const primaryDisplay = screen.getPrimaryDisplay();
+    
+    console.log('[DEBUG] Current displays:', displays.map(d => ({
+      id: d.id,
+      bounds: d.bounds,
+      primary: d.bounds.x === primaryDisplay.bounds.x && d.bounds.y === primaryDisplay.bounds.y
+    })));
     
     // 各ウィンドウの処理を並列実行
     const migrationPromises = Array.from(this.windows.entries()).map(async ([noteId, win]) => {
       const note = await this.dataStore.getNote(noteId);
       if (!note) return;
 
-      const noteDisplay = displays.find(d => d.id.toString() === note.displayId);
+      // 現在の位置を取得
+      const [currentX, currentY] = win.getPosition();
       
-      if (!noteDisplay) {
-        // プライマリディスプレイの安全な位置を計算
-        const safeMargin = 50;
-        const newX = primaryDisplay.bounds.x + safeMargin;
-        const newY = primaryDisplay.bounds.y + safeMargin;
-        
-        // ウィンドウを新しい位置に移動
-        win.setPosition(newX, newY);
-        
-        // データベースを更新（状態に応じて適切なフィールドを更新）
-        const updates: Partial<StickyNote> = {
-          displayId: primaryDisplay.id.toString()
-        };
-        
-        if (note.isActive) {
-          updates.activeX = newX;
-          updates.activeY = newY;
-        } else {
-          updates.inactiveX = newX;
-          updates.inactiveY = newY;
+      // 現在の位置に基づいて適切なディスプレイを探す
+      const containingDisplay = displays.find(display => {
+        const bounds = display.bounds;
+        return currentX >= bounds.x && 
+               currentX <= bounds.x + bounds.width &&
+               currentY >= bounds.y && 
+               currentY <= bounds.y + bounds.height;
+      });
+      
+      if (containingDisplay) {
+        // 適切なディスプレイが見つかった場合、ディスプレイIDを更新
+        if (note.displayId !== containingDisplay.id.toString()) {
+          console.log(`[DEBUG] Updating note ${noteId} display ID from ${note.displayId} to ${containingDisplay.id}`);
+          await this.dataStore.updateNote(noteId, {
+            displayId: containingDisplay.id.toString()
+          });
         }
-        
-        await this.dataStore.updateNote(noteId, updates);
       } else {
-        // ディスプレイが存在する場合は、境界チェックを実行
-        const [currentX, currentY] = win.getPosition();
-        const bounds = noteDisplay.bounds;
+        // どのディスプレイにも含まれていない場合は座標を維持（移動しない）
+        console.log(`[DEBUG] Note ${noteId} is outside all displays, but preserving coordinates`);
+        console.log(`[DEBUG] Current position: (${currentX}, ${currentY}), preserving for future display reconnection`);
         
-        const isOutside = 
-          currentX < bounds.x || currentX > bounds.x + bounds.width ||
-          currentY < bounds.y || currentY > bounds.y + bounds.height;
+        // 座標はそのまま維持し、ディスプレイIDのみ更新
+        // （将来的にディスプレイが再接続されたときに元の位置に戻れるように）
+        // ディスプレイIDは保存されている位置に最も近いディスプレイを推測して設定
+        const savedX = note.isActive ? note.activeX : note.inactiveX;
+        const savedY = note.isActive ? note.activeY : note.inactiveY;
         
-        if (isOutside) {
-          const adjustedX = Math.max(bounds.x, Math.min(currentX, bounds.x + bounds.width - 150));
-          const adjustedY = Math.max(bounds.y, Math.min(currentY, bounds.y + bounds.height - 100));
-          
-          win.setPosition(adjustedX, adjustedY);
-          
-          // 調整された位置をデータベースに保存
-          const updates: Partial<StickyNote> = {};
-          if (note.isActive) {
-            updates.activeX = adjustedX;
-            updates.activeY = adjustedY;
-          } else {
-            updates.inactiveX = adjustedX;
-            updates.inactiveY = adjustedY;
-          }
-          
-          await this.dataStore.updateNote(noteId, updates);
+        let targetDisplay = displays.find(display => {
+          const bounds = display.bounds;
+          const centerX = bounds.x + bounds.width / 2;
+          const centerY = bounds.y + bounds.height / 2;
+          const distance = Math.sqrt(Math.pow(savedX - centerX, 2) + Math.pow(savedY - centerY, 2));
+          return distance < Math.max(bounds.width, bounds.height);
+        });
+        
+        if (!targetDisplay) {
+          targetDisplay = primaryDisplay;
         }
+        
+        // ディスプレイIDのみ更新（座標は変更しない）
+        console.log(`[DEBUG] Updating note ${noteId} display ID to ${targetDisplay.id} (coordinate preservation mode)`);
+        await this.dataStore.updateNote(noteId, {
+          displayId: targetDisplay.id.toString()
+        });
       }
     });
-    
+
     // すべての移行処理を並列実行
     await Promise.all(migrationPromises);
+    console.log('[DEBUG] Display change handling completed');
   }
 
   private setupIpcHandlers() {
@@ -911,8 +915,17 @@ class StickyNotesApp {
     // 検索関連のIPCハンドラー
     ipcMain.handle('search-notes', async (_, query: SearchQuery) => {
       try {
+        console.log('[DEBUG] search-notes IPC called with query:', JSON.stringify(query));
         const notes = await this.dataStore.getAllNotes();
+        console.log('[DEBUG] Found notes count:', notes.length);
         const results = this.searchService.search(query, notes);
+        console.log('[DEBUG] Search results count:', results.length);
+        console.log('[DEBUG] First few results:', results.slice(0, 3).map(r => ({
+          noteId: r.note.id,
+          relevance: r.relevance,
+          matchCount: r.matchCount,
+          previewText: r.note.content ? (typeof r.note.content === 'string' ? r.note.content.substring(0, 50) : 'RichContent') : 'No content'
+        })));
         return results;
       } catch (error) {
         console.error('Error searching notes:', error);
@@ -1208,6 +1221,19 @@ class StickyNotesApp {
           console.error('[ERROR] Error details:', error.message);
         }
         return false;
+      }
+    });
+
+    // すべての付箋を整列させるIPCハンドラー
+    ipcMain.handle('arrange-all-notes', async () => {
+      try {
+        console.log('[DEBUG] arrange-all-notes IPC handler called');
+        const movedCount = await this.arrangeAllNotes();
+        console.log(`[DEBUG] arrange-all-notes completed: ${movedCount} notes arranged`);
+        return { success: true, movedCount };
+      } catch (error) {
+        console.error('[ERROR] Failed to arrange all notes:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
       }
     });
 
@@ -1986,6 +2012,75 @@ class StickyNotesApp {
     } catch (error) {
       console.error('Error extracting text from rich content:', error);
       return '';
+    }
+  }
+
+  /**
+   * すべての付箋をプライマリディスプレイに整列表示
+   */
+  private async arrangeAllNotes() {
+    try {
+      const allNotes = await this.dataStore.getAllNotes();
+      const displays = screen.getAllDisplays();
+      const primaryDisplay = screen.getPrimaryDisplay();
+      
+      console.log('[DEBUG] arrangeAllNotes - primaryDisplay:', primaryDisplay.id, primaryDisplay.bounds);
+      console.log('[DEBUG] arrangeAllNotes - total notes:', allNotes.length);
+      
+      let movedCount = 0;
+      const startX = primaryDisplay.bounds.x + 50;
+      const startY = primaryDisplay.bounds.y + 50;
+      const columnWidth = 250;
+      const rowHeight = 200;
+      let currentColumn = 0;
+      let currentRow = 0;
+      const maxColumns = Math.floor((primaryDisplay.bounds.width - 100) / columnWidth);
+
+      for (const note of allNotes) {
+        const newX = startX + (currentColumn * columnWidth);
+        const newY = startY + (currentRow * rowHeight);
+
+        console.log(`[DEBUG] Arranging note ${note.id} to (${newX}, ${newY})`);
+
+        // グリッド位置を更新
+        currentColumn++;
+        if (currentColumn >= maxColumns) {
+          currentColumn = 0;
+          currentRow++;
+        }
+
+        // 付箋の位置を更新
+        const updates: any = {
+          displayId: primaryDisplay.id.toString()
+        };
+
+        if (note.isActive) {
+          updates.activeX = newX;
+          updates.activeY = newY;
+        } else {
+          updates.inactiveX = newX;
+          updates.inactiveY = newY;
+        }
+
+        await this.dataStore.updateNote(note.id, updates);
+        
+        // 既存のウィンドウがあれば位置を更新
+        const existingWindow = this.windows.get(note.id);
+        
+        if (existingWindow) {
+          existingWindow.setBounds({ x: newX, y: newY, width: 250, height: 200 });
+          console.log(`[DEBUG] Updated window position for note ${note.id}`);
+        }
+
+        movedCount++;
+      }
+
+      console.log(`[DEBUG] arrangeAllNotes completed: ${movedCount} notes arranged`);
+      return movedCount;
+
+    } catch (error) {
+      console.error('Error arranging all notes:', error);
+      throw error;
     }
   }
 

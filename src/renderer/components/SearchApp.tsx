@@ -101,11 +101,7 @@ export const SearchApp: React.FC = () => {
   }, [state.query, state.results, state.selectedIndex]);
 
   const performSearch = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
-      setState(prev => ({ ...prev, results: [], selectedIndex: -1 }));
-      return;
-    }
-
+    console.log('[DEBUG] SearchApp.performSearch called with:', JSON.stringify(searchQuery));
     setState(prev => ({ ...prev, isSearching: true }));
 
     try {
@@ -116,7 +112,9 @@ export const SearchApp: React.FC = () => {
         maxResults: state.maxResults
       };
 
+      console.log('[DEBUG] SearchApp query object:', JSON.stringify(query));
       const results = await window.electronAPI.searchNotes(query);
+      console.log('[DEBUG] SearchApp received results:', results.length);
       setState(prev => ({
         ...prev,
         results,
@@ -133,6 +131,11 @@ export const SearchApp: React.FC = () => {
       }));
     }
   }, [state.caseSensitive, state.maxResults]);
+
+  // 初期検索の実行（performSearchが定義された後）
+  useEffect(() => {
+    performSearch('');
+  }, [performSearch]);
 
   const handleSearchInput = (value: string) => {
     setState(prev => ({ ...prev, query: value }));

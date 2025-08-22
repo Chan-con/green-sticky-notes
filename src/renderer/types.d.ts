@@ -23,6 +23,7 @@ declare global {
       exportNotesToTxt: () => Promise<{success: boolean; path?: string; error?: string}>;
       selectFolderAndExportNotes: () => Promise<{success: boolean; path?: string; error?: string}>;
       openUrlInBrowser: (url: string) => Promise<boolean>;
+      arrangeAllNotes: () => Promise<{success: boolean; movedCount?: number; error?: string}>;
       
       // 検索関連のメソッド
       searchNotes: (query: SearchQuery) => Promise<SearchResult[]>;

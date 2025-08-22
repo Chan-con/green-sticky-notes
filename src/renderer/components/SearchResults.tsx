@@ -142,7 +142,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     );
   }
 
-  if (!query) {
+  if (!query && results.length === 0) {
     return (
       <div className="search-results-container">
         <div className="search-placeholder">
@@ -167,7 +167,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     <div className="search-results-container">
       <div className="results-header">
         <span className="results-count">
-          {results.length}件の結果が見つかりました
+          {query 
+            ? `「${query}」の検索結果：${results.length}件` 
+            : `すべての付箋：${results.length}件`
+          }
         </span>
       </div>
       

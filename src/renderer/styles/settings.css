@@ -259,3 +259,70 @@
   cursor: pointer;
   -webkit-app-region: no-drag;
 }
+
+/* エクスポートグループ */
+.export-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.export-button {
+  background: #CCFFE6;
+  border: 1px solid #C0DCC0;
+  color: #2D4A2D;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+  -webkit-app-region: no-drag;
+}
+
+.export-button:hover:not(:disabled) {
+  background: #B3F2CC;
+}
+
+.export-button:disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* 整列グループ */
+.arrange-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.arrange-button {
+  background: #FFE6CC;
+  border: 1px solid #DCBF8C;
+  color: #4A3D2D;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+  -webkit-app-region: no-drag;
+}
+
+.arrange-button:hover:not(:disabled) {
+  background: #F2D1B3;
+}
+
+.arrange-button:disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.arrange-description {
+  font-size: 12px;
+  color: #666;
+  margin: 0;
+  line-height: 1.4;
+}

@@ -82,11 +82,41 @@ export class SearchService {
   }
 
   search(query: SearchQuery, notes: StickyNote[]): SearchResult[] {
-    if (!this.initialized || !query.text.trim()) {
+    console.log('[DEBUG] SearchService.search called with query:', JSON.stringify(query));
+    console.log('[DEBUG] SearchService.search notes count:', notes.length);
+    console.log('[DEBUG] SearchService initialized:', this.initialized);
+    
+    if (!this.initialized) {
+      console.log('[DEBUG] SearchService not initialized, returning empty array');
       return [];
     }
 
-    const normalizedQuery = this.normalizeForSearch(query.text);
+    const queryText = query.text.trim();
+    console.log('[DEBUG] Query text trimmed:', JSON.stringify(queryText));
+    
+    // キーワードが空の場合、すべての付箋を返す
+    if (!queryText) {
+      console.log('[DEBUG] Empty query detected, returning all notes');
+      const allResults = notes.map(note => {
+        const searchIndex = this.searchIndex.get(note.id);
+        const previewText = searchIndex ? searchIndex.previewText : this.createPreviewText(
+          typeof note.content === 'string' ? note.content : this.extractTextContent(note.content)
+        );
+        
+        return {
+          note,
+          relevance: 1, // すべて同じ関連度
+          highlights: [], // キーワードが空なのでハイライトなし
+          matchCount: 0 // マッチなし
+        };
+      }).sort((a, b) => new Date(b.note.updatedAt).getTime() - new Date(a.note.updatedAt).getTime()); // 更新日時でソート
+      
+      console.log('[DEBUG] All notes result count:', allResults.length);
+      return allResults;
+    }
+
+    // キーワードがある場合の検索処理（既存ロジック）
+    const normalizedQuery = this.normalizeForSearch(queryText);
     const keywords = query.keywords.length > 0 ? 
       query.keywords.map(k => this.normalizeForSearch(k)) : 
       [normalizedQuery];
