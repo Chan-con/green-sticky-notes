@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('note-data', (_, note) => callback(note));
   },
   
+  onSetActive: (callback: (isActive: boolean) => void) => {
+    ipcRenderer.on('set-active', (_, isActive) => callback(isActive));
+  },
+  
   onSettingsChanged: (callback: () => void) => {
     ipcRenderer.on('settings-changed', () => callback());
   },

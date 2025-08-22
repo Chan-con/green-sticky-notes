@@ -66,6 +66,28 @@ export const StickyNoteApp: React.FC = () => {
       }
     });
 
+    // set-active イベントもリッスンして、より確実に状態を更新
+    window.electronAPI.onSetActive((activeState) => {
+      console.log(`[DEBUG] Received set-active event: ${activeState}`);
+      setIsActive(activeState);
+      
+      // 状態変更時にUIを完全に同期
+      setIsTransitioning(true);
+      
+      // 強制再レンダリングと状態リセット
+      setRenderKey(prev => prev + 1);
+      
+      // 短時間後にトランジション状態をクリア
+      setTimeout(() => {
+        setIsTransitioning(false);
+      }, 100);
+      
+      // ノートデータが存在する場合は、isActiveプロパティも更新
+      if (note) {
+        setNote(prevNote => prevNote ? { ...prevNote, isActive: activeState } : null);
+      }
+    });
+
     // 設定変更イベントをリッスン
     const handleSettingsChanged = () => {
       // 保存が確実に完了するまで少し待ってから設定を読み込み
@@ -395,13 +417,22 @@ export const StickyNoteApp: React.FC = () => {
   const handleNoteClick = async () => {
     if (!isActive && note && !isTransitioning) {
       setIsTransitioning(true);
-      await window.electronAPI.setNoteActive(note.id, true);
-      setIsActive(true);
-      setIsTransitioning(false);
-      
-      setTimeout(() => {
-        contentRef.current?.focus();
-      }, 100);
+      try {
+        // 付箋をアクティブ化（他の付箋は自動的に非アクティブ化される）
+        await window.electronAPI.setNoteActive(note.id, true);
+        setIsActive(true);
+        
+        // 強制的に再レンダリングしてUI状態を同期
+        setRenderKey(prev => prev + 1);
+        
+        setTimeout(() => {
+          contentRef.current?.focus();
+        }, 100);
+      } catch (error) {
+        console.error('Failed to activate note:', error);
+      } finally {
+        setIsTransitioning(false);
+      }
     }
   };
 

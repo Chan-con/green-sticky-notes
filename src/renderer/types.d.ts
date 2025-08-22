@@ -8,6 +8,7 @@ declare global {
     };
     electronAPI: {
       onNoteData: (callback: (note: StickyNote) => void) => void;
+      onSetActive: (callback: (isActive: boolean) => void) => void;
       onSettingsChanged: (callback: () => void) => void;
       onSettingsPreview: (callback: (settings: any) => void) => void;
       sendSettingsPreview: (settings: any) => Promise<void>;

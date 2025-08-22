@@ -153,9 +153,7 @@ export const SearchApp: React.FC = () => {
   const openNote = async (result: SearchResult) => {
     try {
       const success = await window.electronAPI.openNoteById(result.note.id);
-      if (success) {
-        handleClose();
-      }
+      // メインプロセス側で検索ウィンドウを閉じるので、ここでは何もしない
     } catch (error) {
       console.error('ノートを開けませんでした:', error);
     }

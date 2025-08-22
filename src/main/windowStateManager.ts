@@ -9,7 +9,8 @@ export interface WindowState {
 
 export class WindowStateManager {
   private windowStates: Map<string, WindowState> = new Map();
-  private readonly TRANSITION_COOLDOWN = 100; // ms
+  private readonly TRANSITION_COOLDOWN = 30; // ms - さらに短縮
+  private pendingBlurTimeouts: Map<string, NodeJS.Timeout> = new Map(); // ブラーイベントの重複防止
 
   /**
    * ウィンドウ状態を登録
@@ -27,7 +28,68 @@ export class WindowStateManager {
    * ウィンドウ状態を削除
    */
   unregisterWindow(windowId: string): void {
+    // 保留中のブラーイベントをクリア
+    const timeout = this.pendingBlurTimeouts.get(windowId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.pendingBlurTimeouts.delete(windowId);
+    }
     this.windowStates.delete(windowId);
+  }
+
+  /**
+   * 重複ブラーイベントの防止とスケジューリング
+   */
+  scheduleBlurEvent(windowId: string, callback: () => void, delay: number = 100): void {
+    // 既存のブラーイベントをキャンセル
+    const existingTimeout = this.pendingBlurTimeouts.get(windowId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    // 新しいブラーイベントをスケジュール
+    const timeout = setTimeout(() => {
+      this.pendingBlurTimeouts.delete(windowId);
+      callback();
+    }, delay);
+
+    this.pendingBlurTimeouts.set(windowId, timeout);
+  }
+
+  /**
+   * ウィンドウ状態変更をリクエスト（blur イベント用 - より緩い条件）
+   */
+  requestBlurStateChange(windowId: string, newState: boolean): boolean {
+    const state = this.windowStates.get(windowId);
+    if (!state) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`Window ${windowId} not registered in state manager`);
+      }
+      return false;
+    }
+
+    // 非アクティブ化のみ許可、さらに緩い条件
+    if (newState === false) {
+      // blur イベントの場合、ほぼ確実に非アクティブ化を許可
+      const timeSinceLastChange = Date.now() - state.lastStateChange;
+      
+      // 非常に短い間隔（5ms未満）でない限り許可
+      if (timeSinceLastChange >= 5) {
+        state.isTransitioning = true;
+        state.lastStateChange = Date.now();
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`Blur state change approved for window ${windowId}: ${state.isActive} -> ${newState} (${timeSinceLastChange}ms)`);
+        }
+        
+        return true;
+      }
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Blur state change blocked for window ${windowId} - only deactivation allowed via blur or too frequent`);
+    }
+    return false;
   }
 
   /**

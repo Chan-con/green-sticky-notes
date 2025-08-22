@@ -14,6 +14,7 @@ class StickyNotesApp {
   private tray: Tray | null = null;
   private isQuitting = false;
   private pendingTimers: Map<string, { moveTimeout?: NodeJS.Timeout, resizeTimeout?: NodeJS.Timeout }> = new Map();
+  private blurTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private settingsWindow: BrowserWindow | null = null;
   private searchWindow: BrowserWindow | null = null;
   private consoleWindow: BrowserWindow | null = null;
@@ -233,6 +234,42 @@ class StickyNotesApp {
       }, 200); // 200msのデバウンス
     });
 
+    // フォーカス損失時の非アクティブ化処理
+    win.on('blur', async () => {
+      const currentNote = await this.dataStore.getNote(note.id);
+      if (currentNote && currentNote.isActive && !currentNote.isLocked) {
+        console.log(`[DEBUG] Blur event triggered for note ${note.id}`);
+        
+        // WindowStateManagerを使って重複ブラーイベントを防止
+        this.windowStateManager.scheduleBlurEvent(note.id, async () => {
+          console.log(`[DEBUG] Processing blur timeout for note ${note.id}`);
+          
+          // 検索ウィンドウや設定ウィンドウがフォーカスされていないかチェック
+          const searchFocused = this.searchWindow && !this.searchWindow.isDestroyed() && this.searchWindow.isFocused();
+          const settingsFocused = this.settingsWindow && !this.settingsWindow.isDestroyed() && this.settingsWindow.isFocused();
+          
+          // 他の付箋ウィンドウがフォーカスされているかチェック
+          let otherNoteFocused = false;
+          for (const [otherId, otherWin] of this.windows) {
+            if (otherId !== note.id && otherWin.isFocused()) {
+              otherNoteFocused = true;
+              break;
+            }
+          }
+          
+          console.log(`[DEBUG] Focus check: search=${searchFocused}, settings=${settingsFocused}, otherNote=${otherNoteFocused}`);
+          
+          // 付箋関連のウィンドウがフォーカスされていない場合は非アクティブ化
+          if (!searchFocused && !settingsFocused && !otherNoteFocused) {
+            console.log(`[DEBUG] Focus lost to external application, deactivating all notes`);
+            await this.deactivateAllNotes(undefined, true); // ブラーイベントからの呼び出しとしてマーク
+          } else {
+            console.log(`[DEBUG] Note ${note.id} focus moved to related window, keeping active`);
+          }
+        }, 80); // 80ms待機に短縮
+      }
+    });
+
     win.on('closed', () => {
       this.windows.delete(note.id);
       this.windowStateManager.unregisterWindow(note.id);
@@ -243,6 +280,13 @@ class StickyNotesApp {
         if (timers.moveTimeout) clearTimeout(timers.moveTimeout);
         if (timers.resizeTimeout) clearTimeout(timers.resizeTimeout);
         this.pendingTimers.delete(note.id);
+      }
+
+      // blurタイムアウトもクリア
+      const blurTimeout = this.blurTimeouts.get(note.id);
+      if (blurTimeout) {
+        clearTimeout(blurTimeout);
+        this.blurTimeouts.delete(note.id);
       }
     });
 
@@ -629,6 +673,11 @@ class StickyNotesApp {
       const note = await this.dataStore.getNote(noteId);
       if (!note) return;
 
+      // アクティブ化する場合は、他のすべてのアクティブな付箋を非アクティブ化
+      if (isActive) {
+        await this.deactivateAllNotes(noteId);
+      }
+
       // 状態変更が許可されているかチェック
       if (!this.windowStateManager.requestStateChange(noteId, isActive)) {
         return;
@@ -935,15 +984,116 @@ class StickyNotesApp {
 
     ipcMain.handle('open-note-by-id', async (_, noteId: string) => {
       try {
+        console.log(`[DEBUG] open-note-by-id called for ${noteId}`);
+        
         const window = this.windows.get(noteId);
-        if (window) {
+        if (!window) {
+          console.log(`[DEBUG] Window not found for note ${noteId}`);
+          return false;
+        }
+
+        // 付箋データを取得
+        const note = await this.dataStore.getNote(noteId);
+        if (!note) {
+          console.log(`[DEBUG] Note data not found for ${noteId}`);
+          return false;
+        }
+        
+        // 現在の状態を確認
+        const wasActive = note.isActive;
+        console.log(`[DEBUG] Note ${noteId} current state: isActive=${wasActive}`);
+        
+        // 他のすべてのアクティブな付箋を非アクティブ化（並行実行せずに順次実行）
+        try {
+          await this.deactivateAllNotes(noteId);
+          console.log(`[DEBUG] Completed deactivating other notes for ${noteId}`);
+        } catch (error) {
+          console.error(`[ERROR] Failed to deactivate other notes:`, error);
+          // エラーが発生しても処理を続行
+        }
+        
+        if (wasActive) {
+          // 既にアクティブな場合は、そのまま表示・フォーカス
           window.show();
           window.focus();
-          // アクティブ状態にする
-          await this.handleSetNoteActive(noteId, true);
+          console.log(`[DEBUG] Note ${noteId} was already active, just showing and focusing`);
           return true;
         }
-        return false;
+        
+        // 非アクティブからアクティブに切り替える場合
+        
+        // 1. 現在の非アクティブ位置を保存
+        const [currentX, currentY] = window.getPosition();
+        const [currentWidth, currentHeight] = window.getSize();
+        
+        // 2. 非アクティブ座標を更新（現在位置を記録）
+        await this.dataStore.updateNote(noteId, {
+          inactiveX: currentX,
+          inactiveY: currentY,
+          inactiveWidth: currentWidth,
+          inactiveHeight: currentHeight
+        });
+        
+        // 3. アクティブモードに切り替え
+        await this.dataStore.updateNote(noteId, { isActive: true });
+        
+        // 4. 保存されているアクティブ座標とサイズを使用
+        let targetX = note.activeX;
+        let targetY = note.activeY;
+        let targetWidth = note.activeWidth || 250;  // デフォルト値
+        let targetHeight = note.activeHeight || 200; // デフォルト値
+        
+        // アクティブ座標が無効な場合は現在位置を使用（初回など）
+        if (typeof targetX !== 'number' || typeof targetY !== 'number') {
+          targetX = currentX;
+          targetY = currentY;
+          // この場合のみアクティブ座標を更新
+          await this.dataStore.updateNote(noteId, {
+            activeX: targetX,
+            activeY: targetY,
+            activeWidth: targetWidth,
+            activeHeight: targetHeight
+          });
+        }
+        
+        // 5. ウィンドウをアクティブモードの位置・サイズに設定
+        window.setBounds({
+          x: Math.round(targetX),
+          y: Math.round(targetY),
+          width: Math.round(targetWidth),
+          height: Math.round(targetHeight)
+        });
+        
+        // 6. ウィンドウを表示・フォーカス・リサイズ可能にする
+        window.show();
+        window.setResizable(true);
+        window.setAlwaysOnTop(true, 'screen-saver', 1);
+        
+        // 検索ウィンドウを閉じてからフォーカスを設定
+        if (this.searchWindow && !this.searchWindow.isDestroyed()) {
+          this.searchWindow.close();
+        }
+        
+        // WindowStateManagerに状態変更完了を通知（ブラーイベントが即座に発生しないように）
+        this.windowStateManager.completeStateChange(noteId, true);
+        
+        // 少し遅延してからフォーカスを設定（検索選択時のブラーイベント回避）
+        setTimeout(() => {
+          if (!window.isDestroyed()) {
+            window.focus();
+            console.log(`[DEBUG] Note ${noteId} focused after search selection`);
+          }
+        }, 120); // 120msに延長してブラーイベントを回避
+        
+        // 7. ウィンドウに更新された状態を通知
+        const updatedNote = await this.dataStore.getNote(noteId);
+        if (updatedNote) {
+          window.webContents.send('note-data', updatedNote);
+          window.webContents.send('set-active', true);
+        }
+        
+        console.log(`[DEBUG] Note ${noteId} activated: inactive(${currentX},${currentY}) -> active(${targetX},${targetY})`);
+        return true;
       } catch (error) {
         console.error('Error opening note:', error);
         return false;
@@ -1593,37 +1743,174 @@ class StickyNotesApp {
     }
   }
 
-  private async handleSetNoteActive(noteId: string, isActive: boolean) {
+  /**
+   * すべてのアクティブな付箋を非アクティブ化（順次実行）
+   */
+  private async deactivateAllNotes(excludeNoteId?: string, isFromBlurEvent: boolean = false): Promise<void> {
+    console.log(`[DEBUG] deactivateAllNotes called, excluding: ${excludeNoteId || 'none'}`);
+    
+    for (const [noteId, window] of this.windows) {
+      if (excludeNoteId && noteId === excludeNoteId) {
+        continue; // 除外対象はスキップ
+      }
+      
+      try {
+        const note = await this.dataStore.getNote(noteId);
+        if (note && note.isActive) {
+          console.log(`[DEBUG] Deactivating note ${noteId}`);
+          // 順次実行で非アクティブ化を実行（ブラーイベントフラグを渡す）
+          await this.handleSetNoteActive(noteId, false, isFromBlurEvent);
+        }
+      } catch (error) {
+        console.error(`[ERROR] Error checking note ${noteId} for deactivation:`, error);
+      }
+    }
+    
+    console.log(`[DEBUG] deactivateAllNotes completed`);
+  }
+
+  private async handleSetNoteActive(noteId: string, isActive: boolean, isBlurEvent: boolean = false) {
+    console.log(`[DEBUG] handleSetNoteActive called: noteId=${noteId}, isActive=${isActive}, isBlurEvent=${isBlurEvent}`);
+    
     const win = this.windows.get(noteId);
-    if (!win) return;
-
-    const note = await this.dataStore.getNote(noteId);
-    if (!note) return;
-
-    // 状態変更が許可されているかチェック
-    if (!this.windowStateManager.requestStateChange(noteId, isActive)) {
+    if (!win) {
+      console.log(`[DEBUG] handleSetNoteActive: window not found for ${noteId}`);
       return;
     }
 
-    await this.dataStore.updateNote(noteId, { isActive });
-    this.windowStateManager.completeStateChange(noteId, isActive);
-    
-    // ウィンドウサイズとリサイズ設定を更新
-    const updatedNote = await this.dataStore.getNote(noteId);
-    if (updatedNote) {
-      const bounds = await this.calculateNoteBounds(updatedNote);
-      win.setBounds({
-        x: Math.round(bounds.x),
-        y: Math.round(bounds.y),
-        width: Math.round(bounds.width),
-        height: Math.round(bounds.height)
-      });
-      win.setResizable(isActive);
-      
-      if (isActive) {
-        win.focus();
-      }
+    const note = await this.dataStore.getNote(noteId);
+    if (!note) {
+      console.log(`[DEBUG] handleSetNoteActive: note not found for ${noteId}`);
+      return;
     }
+
+    console.log(`[DEBUG] handleSetNoteActive: current note.isActive=${note.isActive}, requested=${isActive}`);
+
+    // 状態変更が許可されているかチェック（blur イベントの場合は専用メソッドを使用）
+    const stateChangeAllowed = isBlurEvent 
+      ? this.windowStateManager.requestBlurStateChange(noteId, isActive)
+      : this.windowStateManager.requestStateChange(noteId, isActive);
+    
+    if (!stateChangeAllowed) {
+      console.log(`[DEBUG] handleSetNoteActive: state change not allowed by windowStateManager for ${noteId}`);
+      return;
+    }
+
+    // 現在の状態と同じ場合は何もしない（ただし blur イベントの場合は処理を続行）
+    if (note.isActive === isActive && !isBlurEvent) {
+      console.log(`[DEBUG] handleSetNoteActive: state already ${isActive} for ${noteId}, skipping`);
+      this.windowStateManager.completeStateChange(noteId, isActive);
+      return;
+    }
+
+    console.log(`[DEBUG] handleSetNoteActive: proceeding with state change for ${noteId} from ${note.isActive} to ${isActive}`);
+
+    // 状態切り替え前の現在位置を保存
+    const [currentX, currentY] = win.getPosition();
+    const [currentWidth, currentHeight] = win.getSize();
+
+    if (isActive) {
+      // 非アクティブ → アクティブ
+      
+      // 1. 非アクティブ座標を保存
+      await this.dataStore.updateNote(noteId, {
+        inactiveX: currentX,
+        inactiveY: currentY,
+        inactiveWidth: currentWidth,
+        inactiveHeight: currentHeight,
+        isActive: true
+      });
+      
+      // 2. アクティブ座標を使用（保存されていない場合は現在位置）
+      let targetX = note.activeX;
+      let targetY = note.activeY;
+      let targetWidth = note.activeWidth || 250;
+      let targetHeight = note.activeHeight || 200;
+      
+      if (typeof targetX !== 'number' || typeof targetY !== 'number') {
+        targetX = currentX;
+        targetY = currentY;
+        // 初回の場合のみアクティブ座標を設定
+        await this.dataStore.updateNote(noteId, {
+          activeX: targetX,
+          activeY: targetY,
+          activeWidth: targetWidth,
+          activeHeight: targetHeight
+        });
+      }
+      
+      // 3. ウィンドウをアクティブ位置・サイズに設定
+      win.setBounds({
+        x: Math.round(targetX),
+        y: Math.round(targetY),
+        width: Math.round(targetWidth),
+        height: Math.round(targetHeight)
+      });
+
+      // 4. ウィンドウの表示状態を更新
+      console.log(`[DEBUG] handleSetNoteActive: setting window ${noteId} to be always on top and focused`);
+      win.setAlwaysOnTop(true, 'screen-saver', 1);
+      win.focus();
+      win.webContents.send('set-active', true);
+      
+      // 更新されたノートデータをレンダラーに送信
+      const updatedNote = await this.dataStore.getNote(noteId);
+      if (updatedNote) {
+        win.webContents.send('note-data', updatedNote);
+      }
+      
+      console.log(`[DEBUG] Activated note ${noteId}: inactive(${currentX},${currentY}) -> active(${targetX},${targetY})`);
+      
+    } else {
+      // アクティブ → 非アクティブ
+      
+      // 1. アクティブ座標を保存
+      await this.dataStore.updateNote(noteId, {
+        activeX: currentX,
+        activeY: currentY,
+        activeWidth: currentWidth,
+        activeHeight: currentHeight,
+        isActive: false
+      });
+      
+      // 2. 非アクティブ座標を使用
+      const settings = await this.dataStore.getSettings();
+      let targetX = note.inactiveX || currentX;
+      let targetY = note.inactiveY || currentY;
+      let targetWidth = note.inactiveWidth || settings.defaultInactiveWidth || 120;
+      let targetHeight = note.inactiveHeight || settings.defaultInactiveHeight || 89;
+      
+      // 3. ウィンドウを非アクティブ位置・サイズに設定
+      win.setBounds({
+        x: Math.round(targetX),
+        y: Math.round(targetY),
+        width: Math.round(targetWidth),
+        height: Math.round(targetHeight)
+      });
+
+      // 4. ウィンドウの表示状態を更新
+      console.log(`[DEBUG] handleSetNoteActive: setting window ${noteId} to not always on top and sending inactive state`);
+      win.setAlwaysOnTop(false);
+      win.webContents.send('set-active', false);
+      
+      // 更新されたノートデータをレンダラーに送信
+      const updatedNote = await this.dataStore.getNote(noteId);
+      if (updatedNote) {
+        win.webContents.send('note-data', updatedNote);
+      }
+      
+      console.log(`[DEBUG] Deactivated note ${noteId}: active(${currentX},${currentY}) -> inactive(${targetX},${targetY})`);
+    }
+
+    // リサイズ設定を更新
+    win.setResizable(isActive);
+    
+    if (isActive) {
+      win.focus();
+    }
+
+    this.windowStateManager.completeStateChange(noteId, isActive);
+    console.log(`[DEBUG] handleSetNoteActive: completed state change for ${noteId} to ${isActive}`);
   }
 
   private toggleSearch() {

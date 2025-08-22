@@ -1,8 +1,37 @@
 :root {
   --green-primary: #CCFFE6;
   --green-light: #E6FFEB;
-  --green-dark: #99FFCC;
-  --text-dark: #2D4A2D;
+  --gree.menu-button {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: background-color 0.2s;
+  position: relative;
+  z-index: 20;
+}
+
+.menu-button:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* 非アクティブモードでのメニューボタン制限 */
+.sticky-note.stay-mode .menu-button {
+  opacity: 0.6;
+  pointer-events: auto; /* ピン留めは非アクティブでも使用可能 */
+}
+
+/* ただし、ピン留めと新規作成以外はクリック無効 */
+.sticky-note.stay-mode .menu-button:not([title*="ピン"]):not([title*="新規"]) {
+  pointer-events: none;
+  opacity: 0.3;
+} --text-dark: #2D4A2D;
   --text-light: #5A7A5A;
   --border-color: #C0DCC0;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -110,6 +139,11 @@ html, body {
   user-select: none;
 }
 
+/* 非アクティブモードではスクロールバーを非表示 */
+.note-content.stay-mode::-webkit-scrollbar {
+  display: none;
+}
+
 .url-link {
   color: #2563eb;
   text-decoration: underline;
@@ -128,21 +162,22 @@ html, body {
   padding: 1px 2px;
 }
 
-.note-content::-webkit-scrollbar {
+/* アクティブモードでのみスクロールバーを表示 */
+.note-content:not(.stay-mode)::-webkit-scrollbar {
   width: 6px;
 }
 
 
-.note-content::-webkit-scrollbar-track {
+.note-content:not(.stay-mode)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.note-content::-webkit-scrollbar-thumb {
+.note-content:not(.stay-mode)::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.5);
   border-radius: 3px;
 }
 
-.note-content::-webkit-scrollbar-thumb:hover {
+.note-content:not(.stay-mode)::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.7);
 }
 
