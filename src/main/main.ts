@@ -259,10 +259,28 @@ class StickyNotesApp {
           
           console.log(`[DEBUG] Focus check: search=${searchFocused}, settings=${settingsFocused}, otherNote=${otherNoteFocused}`);
           
-          // 付箋関連のウィンドウがフォーカスされていない場合は非アクティブ化
+          // 付箋関連のウィンドウがフォーカスされていない場合
           if (!searchFocused && !settingsFocused && !otherNoteFocused) {
-            console.log(`[DEBUG] Focus lost to external application, deactivating all notes`);
-            await this.deactivateAllNotes(undefined, true); // ブラーイベントからの呼び出しとしてマーク
+            // 複数アクティブモード：アクティブな付箋の数をチェック
+            let activeNoteCount = 0;
+            for (const [otherId, otherWin] of this.windows) {
+              const otherNote = await this.dataStore.getNote(otherId);
+              if (otherNote && otherNote.isActive) {
+                activeNoteCount++;
+              }
+            }
+            
+            console.log(`[DEBUG] Active note count: ${activeNoteCount}`);
+            
+            if (activeNoteCount <= 1) {
+              // アクティブな付箋が1つ以下の場合は全体を非アクティブ化
+              console.log(`[DEBUG] Single or no active notes, deactivating all`);
+              await this.deactivateAllNotes(undefined, true);
+            } else {
+              // 複数のアクティブな付箋がある場合は、ブラーした付箋のみ非アクティブ化
+              console.log(`[DEBUG] Multiple active notes, deactivating only blurred note ${note.id}`);
+              await this.handleSetNoteActive(note.id, false, true);
+            }
           } else {
             console.log(`[DEBUG] Note ${note.id} focus moved to related window, keeping active`);
           }
@@ -673,10 +691,9 @@ class StickyNotesApp {
       const note = await this.dataStore.getNote(noteId);
       if (!note) return;
 
-      // アクティブ化する場合は、他のすべてのアクティブな付箋を非アクティブ化
-      if (isActive) {
-        await this.deactivateAllNotes(noteId);
-      }
+      // 複数アクティブ対応：他の付箋を非アクティブ化しない
+      // アクティブ化する場合でも、他の付箋はそのままにする（マルチアクティブ対応）
+      console.log(`[DEBUG] set-note-active: Multi-active mode - not deactivating other notes`);
 
       // 状態変更が許可されているかチェック
       if (!this.windowStateManager.requestStateChange(noteId, isActive)) {
@@ -1003,19 +1020,22 @@ class StickyNotesApp {
         const wasActive = note.isActive;
         console.log(`[DEBUG] Note ${noteId} current state: isActive=${wasActive}`);
         
-        // 他のすべてのアクティブな付箋を非アクティブ化（並行実行せずに順次実行）
-        try {
-          await this.deactivateAllNotes(noteId);
-          console.log(`[DEBUG] Completed deactivating other notes for ${noteId}`);
-        } catch (error) {
-          console.error(`[ERROR] Failed to deactivate other notes:`, error);
-          // エラーが発生しても処理を続行
-        }
+        // 複数アクティブ対応：他の付箋を非アクティブ化しない
+        console.log(`[DEBUG] Multi-active mode: skipping deactivation of other notes for ${noteId}`);
         
         if (wasActive) {
           // 既にアクティブな場合は、そのまま表示・フォーカス
           window.show();
           window.focus();
+          
+          // 検索ウィンドウを閉じる（既にアクティブでも必要）
+          if (this.searchWindow && !this.searchWindow.isDestroyed()) {
+            this.searchWindow.close();
+          }
+          
+          // 既にアクティブでもテキストエディタへのフォーカス処理を実行
+          window.webContents.send('set-active', true);
+          
           console.log(`[DEBUG] Note ${noteId} was already active, just showing and focusing`);
           return true;
         }
@@ -1745,6 +1765,7 @@ class StickyNotesApp {
 
   /**
    * すべてのアクティブな付箋を非アクティブ化（順次実行）
+   * ピン留めされた付箋は除外する
    */
   private async deactivateAllNotes(excludeNoteId?: string, isFromBlurEvent: boolean = false): Promise<void> {
     console.log(`[DEBUG] deactivateAllNotes called, excluding: ${excludeNoteId || 'none'}`);
@@ -1757,8 +1778,14 @@ class StickyNotesApp {
       try {
         const note = await this.dataStore.getNote(noteId);
         if (note && note.isActive) {
-          console.log(`[DEBUG] Deactivating note ${noteId}`);
-          // 順次実行で非アクティブ化を実行（ブラーイベントフラグを渡す）
+          // ピン留めされた付箋はアクティブ状態を維持（複数アクティブ対応）
+          if (note.isPinned) {
+            console.log(`[DEBUG] Skipping pinned note ${noteId} - maintaining active state for multi-active mode`);
+            continue;
+          }
+          
+          console.log(`[DEBUG] Deactivating unpinned note ${noteId}`);
+          // ピン留めされていない付箋のみ非アクティブ化
           await this.handleSetNoteActive(noteId, false, isFromBlurEvent);
         }
       } catch (error) {
@@ -1766,7 +1793,7 @@ class StickyNotesApp {
       }
     }
     
-    console.log(`[DEBUG] deactivateAllNotes completed`);
+    console.log(`[DEBUG] deactivateAllNotes completed - pinned notes remain active`);
   }
 
   private async handleSetNoteActive(noteId: string, isActive: boolean, isBlurEvent: boolean = false) {
@@ -1941,6 +1968,7 @@ class StickyNotesApp {
       height: 500,
       resizable: false,
       frame: false,
+      alwaysOnTop: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
