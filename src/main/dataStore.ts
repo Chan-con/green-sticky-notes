@@ -310,6 +310,7 @@ export class DataStore {
       isLocked: false,
       displayId: nearNote ? nearNote.displayId : '1', // 親付箋のディスプレイを引き継ぐ
       isActive: false,
+      isNewlyCreated: true, // 新規作成フラグ
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -399,8 +400,13 @@ export class DataStore {
       const validHeight = Math.max(Math.round(Number(height) || 100), 100);
       
       await this.updateNote(id, { activeWidth: validWidth, activeHeight: validHeight });
+    } else {
+      // 非アクティブ時も適切なサイズを記録
+      const validWidth = Math.max(Math.round(Number(width) || 150), 50);
+      const validHeight = Math.max(Math.round(Number(height) || 125), 50);
+      
+      await this.updateNote(id, { inactiveWidth: validWidth, inactiveHeight: validHeight });
     }
-    // 非アクティブ時のサイズは固定なので変更しない
   }
 
   async getSettings(): Promise<AppSettings> {

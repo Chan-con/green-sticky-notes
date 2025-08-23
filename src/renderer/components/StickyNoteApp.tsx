@@ -63,6 +63,17 @@ export const StickyNoteApp: React.FC = () => {
         setIsActive(noteData.isActive);
         setIsLoading(false);
         clearTimeout(loadingTimeout);
+        
+        // 非アクティブ状態で空の付箋を自動削除（新規作成フラグがない場合のみ）
+        if (!noteData.isActive && !noteData.isNewlyCreated) {
+          const isEmpty = !getContentAsString(noteData.content).trim();
+          
+          if (isEmpty) {
+            console.log('[DEBUG] Auto-deleting empty inactive note:', noteData.id);
+            window.electronAPI.deleteNote(noteData.id);
+            return;
+          }
+        }
       }
     });
 
@@ -133,9 +144,10 @@ export const StickyNoteApp: React.FC = () => {
       if (event.key === 'Escape' && isActive && note && !note.isLocked) {
         event.preventDefault();
         
-        // 空の付箋は削除
+        // 空の付箋は削除（新規作成フラグがない場合のみ）
         const isEmpty = !getContentAsString(note.content).trim();
-        if (isEmpty) {
+        if (isEmpty && !note.isNewlyCreated) {
+          console.log('[DEBUG] Deleting empty note on ESC');
           window.electronAPI.deleteNote(note.id);
           return;
         }
@@ -472,7 +484,8 @@ export const StickyNoteApp: React.FC = () => {
       blurTimeoutRef.current = setTimeout(async () => {
         const isEmpty = !getContentAsString(note.content).trim();
         
-        if (isEmpty) {
+        if (isEmpty && !note.isNewlyCreated) {
+          console.log('[DEBUG] Deleting empty note on blur');
           window.electronAPI.deleteNote(note.id);
           return;
         }
@@ -487,9 +500,21 @@ export const StickyNoteApp: React.FC = () => {
     }
   };
 
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
+
   const createNewNote = async () => {
-    if (note) {
-      await window.electronAPI.createNote(note.id);
+    if (note && !isCreatingNote) {
+      setIsCreatingNote(true);
+      try {
+        await window.electronAPI.createNote(note.id);
+      } catch (error) {
+        console.error('Failed to create new note:', error);
+      } finally {
+        // 500ms後にフラグをリセット（重複作成を防ぐ）
+        setTimeout(() => {
+          setIsCreatingNote(false);
+        }, 500);
+      }
     }
   };
 
@@ -571,7 +596,7 @@ export const StickyNoteApp: React.FC = () => {
         ref={contentRef}
         onContentChange={updateNoteContent}
         onBlur={handleBlur}
-        inactiveFontSize={settings?.defaultInactiveFontSize ?? 12}
+        inactiveFontSize={note?.fontSize ?? (settings?.defaultInactiveFontSize ?? 12)}
       />
     </div>
   );

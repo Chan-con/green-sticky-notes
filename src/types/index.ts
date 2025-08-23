@@ -29,6 +29,7 @@ export interface StickyNote {
   isLocked: boolean;
   displayId: string;
   isActive: boolean;
+  isNewlyCreated?: boolean; // 新規作成フラグ（初回編集モード化時にfalseになる）
   createdAt: number;
   updatedAt: number;
 }
