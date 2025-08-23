@@ -144,6 +144,15 @@
   background: #99FFCC;
 }
 
+.settings-actions .cancel-button {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.settings-actions .cancel-button:hover {
+  background: #e5e5e5;
+}
+
 /* サイズスライダー */
 .size-input-group {
   flex: 1;

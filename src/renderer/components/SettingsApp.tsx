@@ -146,6 +146,14 @@ export const SettingsApp: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // ESCキーが押されたときの処理（ホットキー設定中でない場合）
+      if (event.key === 'Escape' && !listeningFor) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleCancel();
+        return;
+      }
+      
       // ホットキー設定をリッスンしている場合
       if (listeningFor) {
         // ホットキー設定時は全てのキーをキャプチャ
@@ -353,6 +361,25 @@ export const SettingsApp: React.FC = () => {
     } finally {
       console.log('[DEBUG] Setting isArranging to false');
       setIsArranging(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    try {
+      // 設定を元に戻し、プレビューを送信
+      await sendPreview(originalSettings);
+      
+      // 安全に閉じることを示すフラグを設定
+      setIsClosingSafely(true);
+      
+      // 少し待ってから設定ウィンドウを閉じる
+      setTimeout(async () => {
+        if (window.electronAPI && window.electronAPI.closeSettings) {
+          await window.electronAPI.closeSettings();
+        }
+      }, 100);
+    } catch (error) {
+      console.error('設定のキャンセル中にエラーが発生しました:', error);
     }
   };
 
@@ -766,6 +793,7 @@ export const SettingsApp: React.FC = () => {
         )}
         
         <div className="settings-actions">
+          <button onClick={handleCancel} className="cancel-button">キャンセル</button>
           <button onClick={handleSave}>保存</button>
         </div>
       </div>
