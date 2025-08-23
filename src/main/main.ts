@@ -41,7 +41,7 @@ class StickyNotesApp {
     
     // 2つ目のインスタンスが起動しようとした場合の処理
     app.on('second-instance', () => {
-      this.showAllWindows();
+      this.showAllWindowsOnly();
     });
 
     app.whenReady().then(async () => {
@@ -1398,9 +1398,9 @@ class StickyNotesApp {
     ipcMain.handle('arrange-all-notes', async () => {
       try {
         console.log('[DEBUG] arrange-all-notes IPC handler called');
-        const movedCount = await this.arrangeAllNotes();
-        console.log(`[DEBUG] arrange-all-notes completed: ${movedCount} notes arranged`);
-        return { success: true, movedCount };
+        await this.arrangeAllNotesInGrid();
+        console.log(`[DEBUG] arrange-all-notes completed: notes arranged in grid`);
+        return { success: true, movedCount: 0 }; // movedCountは今回は使わないが互換性のため残す
       } catch (error) {
         console.error('[ERROR] Failed to arrange all notes:', error);
         return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -1458,7 +1458,10 @@ class StickyNotesApp {
       
       // トレイアイコンがクリックされた時の処理
       this.tray.on('click', () => {
-        this.showAllWindows();
+        // 単純にすべてのウィンドウを表示（整列はしない）
+        this.windows.forEach(win => {
+          win.show();
+        });
       });
       
       // 右クリック時のコンテキストメニュー
@@ -1488,11 +1491,11 @@ class StickyNotesApp {
       },
       { type: 'separator' },
       {
-        label: 'すべてのノートを表示',
+        label: 'すべての付箋を整列表示',
         click: () => this.showAllWindows()
       },
       {
-        label: 'すべてのノートを隠す',
+        label: 'すべての付箋を隠す',
         click: () => this.hideAllWindows()
       },
       { type: 'separator' },
@@ -1539,17 +1542,144 @@ class StickyNotesApp {
     }
   }
 
-  private showAllWindows() {
+  private showAllWindowsOnly() {
+    // 単純にすべてのウィンドウを表示（整列はしない）
     this.windows.forEach(win => {
       win.show();
-      win.focus();
     });
+  }
+
+  private async showAllWindows() {
+    console.log('[DEBUG] showAllWindows: Starting arrangement');
+    
+    // まず簡単にすべてのウィンドウを表示
+    this.windows.forEach((win, noteId) => {
+      console.log(`[DEBUG] showAllWindows: Showing window for note ${noteId}`);
+      win.show();
+    });
+
+    // その後、整列処理を実行
+    await this.arrangeAllNotesInGrid();
   }
 
   private hideAllWindows() {
     this.windows.forEach(win => {
       win.hide();
     });
+  }
+
+  private async arrangeAllNotesInGrid() {
+    console.log('[DEBUG] arrangeAllNotesInGrid: Starting grid arrangement');
+    
+    try {
+      // 全ての付箋を取得
+      const allNotes = await this.dataStore.getAllNotes();
+      console.log(`[DEBUG] arrangeAllNotesInGrid: Found ${allNotes.length} notes`);
+      
+      if (allNotes.length === 0) {
+        console.log('[DEBUG] arrangeAllNotesInGrid: No notes to arrange');
+        return;
+      }
+
+      // まず全ての付箋を非アクティブ化
+      console.log('[DEBUG] arrangeAllNotesInGrid: Deactivating all notes');
+      for (const note of allNotes) {
+        if (note.isActive || note.isLocked || note.isPinned) {
+          console.log(`[DEBUG] arrangeAllNotesInGrid: Updating note ${note.id} - active:${note.isActive}, locked:${note.isLocked}, pinned:${note.isPinned}`);
+          
+          await this.dataStore.updateNote(note.id, {
+            isActive: false,
+            isLocked: false,
+            isPinned: false
+          });
+          
+          // ウィンドウに状態変更を通知
+          const win = this.windows.get(note.id);
+          if (win) {
+            win.webContents.send('set-active', false);
+            win.webContents.send('set-locked', false);
+            win.webContents.send('set-pinned', false);
+            console.log(`[DEBUG] arrangeAllNotesInGrid: Sent deactivation signals to note ${note.id}`);
+          }
+        }
+      }
+
+      // 設定を取得
+      const settings = await this.dataStore.getSettings();
+      
+      // プライマリディスプレイの情報を取得
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const { workArea } = primaryDisplay;
+      console.log(`[DEBUG] arrangeAllNotesInGrid: Work area - x:${workArea.x}, y:${workArea.y}, width:${workArea.width}, height:${workArea.height}`);
+      
+      // 非アクティブ状態のサイズを設定から取得
+      const noteWidth = settings.defaultInactiveWidth || 120;
+      const noteHeight = settings.defaultInactiveHeight || 89;
+      console.log(`[DEBUG] arrangeAllNotesInGrid: Note size - width:${noteWidth}, height:${noteHeight}`);
+      
+      // グリッドの計算
+      const padding = 20; // 付箋間の間隔を大きくしてテスト
+      const cols = Math.floor((workArea.width - padding) / (noteWidth + padding));
+      const rows = Math.ceil(allNotes.length / cols);
+      
+      // グリッドの開始位置（左上から配置してテスト）
+      const startX = workArea.x + padding;
+      const startY = workArea.y + padding;
+      
+      console.log(`[DEBUG] arrangeAllNotesInGrid: Grid layout ${cols}x${rows}, start position (${startX}, ${startY})`);
+      
+      // 付箋をグリッドに配置
+      for (let i = 0; i < allNotes.length; i++) {
+        const note = allNotes[i];
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        
+        const x = startX + col * (noteWidth + padding);
+        const y = startY + row * (noteHeight + padding);
+        
+        console.log(`[DEBUG] arrangeAllNotesInGrid: Positioning note ${note.id} at (${x}, ${y}) - col:${col}, row:${row}`);
+        
+        // アクティブサイズのデフォルト値を設定
+        const activeWidth = 400;
+        const activeHeight = 300;
+        
+        // 位置を更新（非アクティブとアクティブ両方の座標を同じ位置に設定）
+        await this.dataStore.updateNote(note.id, {
+          // 非アクティブ座標
+          inactiveX: x,
+          inactiveY: y,
+          inactiveWidth: noteWidth,
+          inactiveHeight: noteHeight,
+          // アクティブ座標も同じ位置に設定（回収不能な付箋の救済のため）
+          activeX: x,
+          activeY: y,
+          activeWidth: activeWidth,
+          activeHeight: activeHeight,
+          displayId: primaryDisplay.id.toString()
+        });
+        
+        // ウィンドウの位置とサイズを更新
+        const win = this.windows.get(note.id);
+        if (win) {
+          console.log(`[DEBUG] arrangeAllNotesInGrid: Setting window bounds for note ${note.id}`);
+          win.setBounds({
+            x: x,
+            y: y,
+            width: noteWidth,
+            height: noteHeight
+          });
+          win.show();
+          console.log(`[DEBUG] arrangeAllNotesInGrid: Note ${note.id} positioned and shown`);
+        } else {
+          console.log(`[DEBUG] arrangeAllNotesInGrid: Window not found for note ${note.id}`);
+        }
+      }
+      
+      console.log('[DEBUG] arrangeAllNotesInGrid: Grid arrangement completed');
+      
+    } catch (error) {
+      console.error('[ERROR] arrangeAllNotesInGrid: Failed to arrange notes:', error);
+    }
   }
 
 
@@ -1608,15 +1738,19 @@ class StickyNotesApp {
         } else {
           const success = globalShortcut.register(hotkey, () => {
             if (process.env.NODE_ENV === 'development') {
-              console.log(`Show all hotkey pressed. Settings window open: ${this.isSettingsWindowOpen}`);
+              console.log(`[DEBUG] Show all hotkey pressed: ${hotkey}. Settings window open: ${this.isSettingsWindowOpen}`);
             }
             if (!this.isSettingsWindowOpen) {
+              console.log(`[DEBUG] Executing showAllWindows function`);
               this.showAllWindows();
+            } else {
+              console.log(`[DEBUG] Skipping showAllWindows - settings window is open`);
             }
           });
           
           if (success) {
             this.registeredHotkeys.add(hotkey);
+            console.log(`[DEBUG] Successfully registered show all hotkey: ${hotkey}`);
           } else {
             console.error(`Failed to register show all hotkey: ${hotkey}`);
             registrationErrors.push(`ホットキー "${hotkey}" の登録に失敗しました`);
@@ -2333,72 +2467,6 @@ class StickyNotesApp {
   /**
    * すべての付箋をプライマリディスプレイに整列表示
    */
-  private async arrangeAllNotes() {
-    try {
-      const allNotes = await this.dataStore.getAllNotes();
-      const displays = screen.getAllDisplays();
-      const primaryDisplay = screen.getPrimaryDisplay();
-      
-      console.log('[DEBUG] arrangeAllNotes - primaryDisplay:', primaryDisplay.id, primaryDisplay.bounds);
-      console.log('[DEBUG] arrangeAllNotes - total notes:', allNotes.length);
-      
-      let movedCount = 0;
-      const startX = primaryDisplay.bounds.x + 50;
-      const startY = primaryDisplay.bounds.y + 50;
-      const columnWidth = 250;
-      const rowHeight = 200;
-      let currentColumn = 0;
-      let currentRow = 0;
-      const maxColumns = Math.floor((primaryDisplay.bounds.width - 100) / columnWidth);
-
-      for (const note of allNotes) {
-        const newX = startX + (currentColumn * columnWidth);
-        const newY = startY + (currentRow * rowHeight);
-
-        console.log(`[DEBUG] Arranging note ${note.id} to (${newX}, ${newY})`);
-
-        // グリッド位置を更新
-        currentColumn++;
-        if (currentColumn >= maxColumns) {
-          currentColumn = 0;
-          currentRow++;
-        }
-
-        // 付箋の位置を更新
-        const updates: any = {
-          displayId: primaryDisplay.id.toString()
-        };
-
-        if (note.isActive) {
-          updates.activeX = newX;
-          updates.activeY = newY;
-        } else {
-          updates.inactiveX = newX;
-          updates.inactiveY = newY;
-        }
-
-        await this.dataStore.updateNote(note.id, updates);
-        
-        // 既存のウィンドウがあれば位置を更新
-        const existingWindow = this.windows.get(note.id);
-        
-        if (existingWindow) {
-          existingWindow.setBounds({ x: newX, y: newY, width: 250, height: 200 });
-          console.log(`[DEBUG] Updated window position for note ${note.id}`);
-        }
-
-        movedCount++;
-      }
-
-      console.log(`[DEBUG] arrangeAllNotes completed: ${movedCount} notes arranged`);
-      return movedCount;
-
-    } catch (error) {
-      console.error('Error arranging all notes:', error);
-      throw error;
-    }
-  }
-
 }
 
 new StickyNotesApp();
