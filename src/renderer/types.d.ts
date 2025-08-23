@@ -5,6 +5,7 @@ declare global {
     electron: {
       showContextMenu: () => Promise<void>;
       showContextMenuWithUrl: (url: string | null) => Promise<void>;
+      showInactiveHeaderContextMenu: (noteId: string) => Promise<void>;
     };
     electronAPI: {
       onNoteData: (callback: (note: StickyNote) => void) => void;

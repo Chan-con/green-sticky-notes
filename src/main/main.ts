@@ -134,6 +134,7 @@ class StickyNotesApp {
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
         devTools: true, // コンソールボタンから開発者ツールを開けるように有効化
+        webSecurity: false, // コンテキストメニューのオーバーライドを有効にする
       },
     });
 
@@ -166,6 +167,36 @@ class StickyNotesApp {
       }
       if (input.key === 'F12') {
         event.preventDefault();
+      }
+    });
+
+    // デフォルトのコンテキストメニューを完全に無効化
+    win.webContents.on('context-menu', (event, params) => {
+      console.log('[DEBUG] Context menu event intercepted and prevented');
+      event.preventDefault();
+      
+      // 非アクティブ状態の付箋の場合のみカスタムメニューを表示
+      this.dataStore.getNote(note.id).then(currentNote => {
+        if (currentNote && !currentNote.isActive) {
+          console.log('[DEBUG] Showing context menu for inactive note:', note.id);
+          this.showInactiveContextMenu(note.id);
+        }
+      });
+      
+      return false;
+    });
+
+    // キーボードショートカット（F2キー）でリセット機能を提供
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && input.key === 'F2') {
+        console.log('[DEBUG] F2 key pressed for note:', note.id);
+        
+        this.dataStore.getNote(note.id).then(currentNote => {
+          if (currentNote && !currentNote.isActive) {
+            console.log('[DEBUG] Resetting coordinates for inactive note via F2:', note.id);
+            this.resetNoteActiveCoordinates(note.id);
+          }
+        });
       }
     });
 
@@ -900,6 +931,52 @@ class StickyNotesApp {
       }
     });
 
+    // 非アクティブ付箋のヘッダー用コンテキストメニュー
+    ipcMain.handle('show-inactive-header-context-menu', (event, noteId: string) => {
+      console.log(`[DEBUG] show-inactive-header-context-menu IPC handler called for note: ${noteId}`);
+      
+      const menuTemplate: Electron.MenuItemConstructorOptions[] = [
+        {
+          label: 'アクティブ時の座標・サイズを初期化',
+          click: async () => {
+            console.log(`[DEBUG] Context menu item clicked for note: ${noteId}`);
+            try {
+              const note = await this.dataStore.getNote(noteId);
+              if (!note) {
+                console.error(`[ERROR] Note not found: ${noteId}`);
+                return;
+              }
+
+              // アクティブ座標を現在の非アクティブ座標に設定
+              const activeWidth = 400;  // デフォルトのアクティブ幅
+              const activeHeight = 300; // デフォルトのアクティブ高さ
+
+              await this.dataStore.updateNote(noteId, {
+                activeX: note.inactiveX,
+                activeY: note.inactiveY,
+                activeWidth: activeWidth,
+                activeHeight: activeHeight
+              });
+
+              console.log(`[DEBUG] Active coordinates reset for note: ${noteId}`);
+            } catch (error) {
+              console.error('Failed to reset active coordinates:', error);
+            }
+          }
+        }
+      ];
+      
+      const contextMenu = Menu.buildFromTemplate(menuTemplate);
+      
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        console.log(`[DEBUG] Showing context menu for note: ${noteId}`);
+        contextMenu.popup({ window: win });
+      } else {
+        console.error(`[DEBUG] Failed to find window for context menu`);
+      }
+    });
+
     ipcMain.handle('close-settings', () => {
       if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
         this.settingsWindow.close();
@@ -1407,6 +1484,36 @@ class StickyNotesApp {
       }
     });
 
+    // アクティブ座標を初期化するIPCハンドラー
+    ipcMain.handle('reset-active-coordinates', async (_, noteId: string) => {
+      try {
+        console.log(`[DEBUG] reset-active-coordinates IPC handler called for note: ${noteId}`);
+        
+        const note = await this.dataStore.getNote(noteId);
+        if (!note) {
+          console.error(`[ERROR] Note not found: ${noteId}`);
+          return { success: false, error: '付箋が見つかりませんでした' };
+        }
+
+        // アクティブ座標を現在の非アクティブ座標に設定
+        const activeWidth = 400;  // デフォルトのアクティブ幅
+        const activeHeight = 300; // デフォルトのアクティブ高さ
+
+        await this.dataStore.updateNote(noteId, {
+          activeX: note.inactiveX,
+          activeY: note.inactiveY,
+          activeWidth: activeWidth,
+          activeHeight: activeHeight
+        });
+
+        console.log(`[DEBUG] reset-active-coordinates completed for note: ${noteId}`);
+        return { success: true };
+      } catch (error) {
+        console.error('[ERROR] Failed to reset active coordinates:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
   }
 
   private createTray() {
@@ -1894,6 +2001,77 @@ class StickyNotesApp {
       await this.searchService.initialize(notes);
     } catch (error) {
       console.error('Failed to initialize search service:', error);
+    }
+  }
+
+  /**
+   * 非アクティブな付箋のコンテキストメニューを表示
+   */
+  private async showInactiveContextMenu(noteId: string): Promise<void> {
+    console.log(`[DEBUG] Showing context menu for note: ${noteId}`);
+    
+    const menuTemplate: Electron.MenuItemConstructorOptions[] = [
+      {
+        label: 'アクティブ時の座標・サイズを初期化',
+        click: async () => {
+          console.log(`[DEBUG] Context menu item clicked for note: ${noteId}`);
+          try {
+            const note = await this.dataStore.getNote(noteId);
+            if (!note) {
+              console.error(`[ERROR] Note not found: ${noteId}`);
+              return;
+            }
+
+            // アクティブ座標を現在の非アクティブ座標に設定
+            const activeWidth = 400;  // デフォルトのアクティブ幅
+            const activeHeight = 300; // デフォルトのアクティブ高さ
+
+            await this.dataStore.updateNote(noteId, {
+              activeX: note.inactiveX,
+              activeY: note.inactiveY,
+              activeWidth: activeWidth,
+              activeHeight: activeHeight
+            });
+
+            console.log(`[DEBUG] Active coordinates reset for note: ${noteId}`);
+          } catch (error) {
+            console.error('Failed to reset active coordinates:', error);
+          }
+        }
+      }
+    ];
+
+    const menu = Menu.buildFromTemplate(menuTemplate);
+    menu.popup();
+  }
+
+  /**
+   * ノートのアクティブ座標をリセット
+   */
+  private async resetNoteActiveCoordinates(noteId: string): Promise<void> {
+    console.log(`[DEBUG] Resetting active coordinates for note: ${noteId}`);
+    
+    try {
+      const note = await this.dataStore.getNote(noteId);
+      if (!note) {
+        console.error(`[ERROR] Note not found: ${noteId}`);
+        return;
+      }
+
+      // アクティブ座標を現在の非アクティブ座標に設定
+      const activeWidth = 400;  // デフォルトのアクティブ幅
+      const activeHeight = 300; // デフォルトのアクティブ高さ
+
+      await this.dataStore.updateNote(noteId, {
+        activeX: note.inactiveX,
+        activeY: note.inactiveY,
+        activeWidth: activeWidth,
+        activeHeight: activeHeight
+      });
+
+      console.log(`[DEBUG] Active coordinates reset for note: ${noteId}`);
+    } catch (error) {
+      console.error('Failed to reset active coordinates:', error);
     }
   }
 

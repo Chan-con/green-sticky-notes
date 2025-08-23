@@ -353,7 +353,51 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   if (!isActive) {
     
     return (
-      <div className="note-header" style={headerStyle} onClick={(e) => e.stopPropagation()}>
+      <div 
+        className="note-header" 
+        style={headerStyle} 
+        onClick={(e) => {
+          e.stopPropagation();
+          console.log('[DEBUG] Inactive header clicked for note:', note.id);
+        }}
+        onMouseDown={(e) => {
+          console.log('[DEBUG] Inactive header mouse down event:', e.button, 'for note:', note.id);
+          if (e.button === 2) { // 右クリック
+            console.log('[DEBUG] Right mouse button detected');
+          }
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Disable the browser's default context menu
+          window.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            return false;
+          }, { once: true, capture: true });
+          
+          console.log('[DEBUG] Inactive NoteHeader right-click event triggered for note:', note.id);
+          console.log('[DEBUG] Note isActive:', isActive);
+          console.log('[DEBUG] window.electron:', window.electron);
+          console.log('[DEBUG] window.electron.showInactiveHeaderContextMenu:', window.electron?.showInactiveHeaderContextMenu);
+          
+          // Prevent any default behavior
+          setTimeout(() => {
+            try {
+              if (window.electron && window.electron.showInactiveHeaderContextMenu) {
+                window.electron.showInactiveHeaderContextMenu(note.id);
+                console.log('[DEBUG] showInactiveHeaderContextMenu called successfully');
+              } else {
+                console.error('[DEBUG] showInactiveHeaderContextMenu method not available');
+              }
+            } catch (error) {
+              console.error('[DEBUG] Error calling showInactiveHeaderContextMenu:', error);
+            }
+          }, 10);
+          
+          return false;
+        }}
+      >
         <div className="header-menu">
           <button
             className="menu-button"
@@ -403,7 +447,15 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
 
   return (
     <>
-      <div className="note-header" style={headerStyle} onClick={(e) => e.stopPropagation()}>
+      <div 
+        className="note-header" 
+        style={headerStyle} 
+        onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => {
+          console.log('[DEBUG] Active NoteHeader right-click event triggered for note:', note.id);
+          console.log('[DEBUG] Note isActive:', isActive);
+        }}
+      >
         <div className="header-menu">
           <button
             className="menu-button"
