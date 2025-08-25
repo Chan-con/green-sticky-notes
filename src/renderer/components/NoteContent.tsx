@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, memo, useCallback } from 'react';
 import { StickyNote, RichContent } from '../../types';
 
 interface NoteContentProps {
@@ -9,13 +9,13 @@ interface NoteContentProps {
   inactiveFontSize?: number;
 }
 
-export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
+export const NoteContent = memo(forwardRef<HTMLTextAreaElement, NoteContentProps>(
   ({ note, isActive, onContentChange, onBlur, inactiveFontSize = 12 }, ref) => {
     const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 
-    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
       onContentChange(e.target.value);
-    };
+    }, [onContentChange]);
 
     const detectUrlAtPosition = (text: string, position: number): string | null => {
       const matches = [...text.matchAll(URL_REGEX)];
@@ -123,4 +123,4 @@ export const NoteContent = forwardRef<HTMLTextAreaElement, NoteContentProps>(
       </div>
     );
   }
-);
+));

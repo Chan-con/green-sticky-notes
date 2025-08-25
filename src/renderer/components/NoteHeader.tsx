@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { StickyNote } from '../../types';
 
 interface NoteHeaderProps {
@@ -140,7 +140,7 @@ const generateHeaderColor = (bodyColor: string): string => {
   return hslToHex(h, newS, newL);
 };
 
-export const NoteHeader: React.FC<NoteHeaderProps> = ({
+export const NoteHeader: React.FC<NoteHeaderProps> = memo(({
   note,
   isActive,
   headerIconSize,
@@ -654,4 +654,4 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
 
     </>
   );
-};
+});

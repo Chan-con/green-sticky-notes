@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo, useMemo, useCallback } from 'react';
 import { StickyNote, RichContent, AppSettings } from '../../types';
 import { NoteHeader } from './NoteHeader';
 import { NoteContent } from './NoteContent';
 
 
-export const StickyNoteApp: React.FC = () => {
+export const StickyNoteApp: React.FC = memo(() => {
   const [note, setNote] = useState<StickyNote | null>(null);
   const [isActive, setIsActive] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -204,16 +204,15 @@ export const StickyNoteApp: React.FC = () => {
         clearInterval(autoSaveIntervalRef.current);
       }
       autoSaveIntervalRef.current = setInterval(async () => {
-        if (note && Date.now() - lastSaveRef.current > 2000) {
+        if (note && Date.now() - lastSaveRef.current > 10000) { // 10秒以上経過した場合のみ
           try {
             await window.electronAPI.updateNote(note.id, { content: note.content });
             lastSaveRef.current = Date.now();
           } catch (error) {
             console.error('Auto-save failed:', error);
-            // 自動保存失敗時は次回の間隔を短くして再試行
           }
         }
-      }, 3000);
+      }, 15000); // 15秒間隔に変更
     };
 
     // 緊急保存ハンドラー
@@ -412,7 +411,7 @@ export const StickyNoteApp: React.FC = () => {
     }
 
     try {
-      // 即座に保存して競合状態を回避
+      // 即座に保存して競合状態を回避（contentは文字列なのでサニタイズ不要）
       await window.electronAPI.updateNote(note.id, { content });
       lastSaveRef.current = Date.now();
     } catch (error) {
@@ -473,7 +472,7 @@ export const StickyNoteApp: React.FC = () => {
   // ブラーイベントのデバウンス用のタイムアウト
   const blurTimeoutRef = useRef<NodeJS.Timeout>();
 
-  const handleBlur = () => {
+  const handleBlur = useCallback(() => {
     if (isActive && note && !note.isLocked) {
       // 既存のタイムアウトをクリア
       if (blurTimeoutRef.current) {
@@ -498,7 +497,7 @@ export const StickyNoteApp: React.FC = () => {
         setIsTransitioning(false);
       }, 150); // ブラーイベントのデバウンス
     }
-  };
+  }, [isActive, note]);
 
   const [isCreatingNote, setIsCreatingNote] = useState(false);
 
@@ -600,4 +599,4 @@ export const StickyNoteApp: React.FC = () => {
       />
     </div>
   );
-};
+});

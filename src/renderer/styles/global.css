@@ -289,3 +289,41 @@ html, body {
   background: var(--green-light);
 }
 
+/* ==============================
+   Phase 1: パフォーマンス最適化
+   ============================== */
+
+/* 非アクティブ時のアニメーション無効化 */
+.sticky-note.stay-mode,
+.sticky-note.stay-mode * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* 非アクティブ時のCSSレンダリング最適化 */
+.sticky-note.stay-mode {
+  /* GPU加速を無効にしてCPU負荷を軽減 */
+  transform: none;
+  will-change: auto;
+  /* 3D変換を無効化 */
+  transform-style: flat;
+  backface-visibility: hidden;
+}
+
+/* アクティブ時は通常のパフォーマンス */
+.sticky-note.active-mode {
+  /* 必要に応じてGPU加速を使用 */
+  will-change: transform, opacity;
+}
+
+/* レンダリング最適化用の遷移無効化 */
+.sticky-note.transitioning {
+  pointer-events: none;
+}
+
+/* Phase 1: リアクティブなDOM更新の抑制 */
+.sticky-note.stay-mode .note-content {
+  /* 文字入力時の再描画を最小化 */
+  contain: layout style;
+}
+

@@ -7,6 +7,65 @@ import { DataStore } from './dataStore';
 import { WindowStateManager } from './windowStateManager';
 import { SearchService } from './searchService';
 
+/**
+ * デバッグログ制御関数
+ */
+function debugLog(...args: any[]) {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(...args);
+  }
+}
+
+/**
+ * IPC送信用のオブジェクトサニタイズ機能（メインプロセス側）
+ * レンダラープロセスに送信する前にオブジェクトをクリーンアップ
+ */
+function sanitizeForIPC(obj: any): any {
+  try {
+    return JSON.parse(JSON.stringify(obj, (key, value) => {
+      // 特定の型のハンドリング
+      if (value instanceof Date) {
+        return value.getTime(); // DateをTimestampに変換
+      }
+      if (typeof value === 'function') {
+        return undefined; // 関数は除外
+      }
+      if (value instanceof Error) {
+        return { name: value.name, message: value.message }; // エラーオブジェクトは安全な形に変換
+      }
+      return value;
+    }));
+  } catch (error) {
+    console.warn('[IPC-Main] Object serialization failed, using safe fallback:', error);
+    // 最後の手段：プリミティブ値のみを抽出
+    if (typeof obj === 'object' && obj !== null) {
+      const safe: any = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'string' || 
+            typeof value === 'number' || 
+            typeof value === 'boolean' || 
+            value === null) {
+          safe[key] = value;
+        }
+      }
+      return safe;
+    }
+    return obj;
+  }
+}
+
+/**
+ * 安全なwebContents.send（サニタイズ付き）
+ */
+function safeSend(webContents: Electron.WebContents, channel: string, ...args: any[]): void {
+  try {
+    const sanitizedArgs = args.map(arg => sanitizeForIPC(arg));
+    webContents.send(channel, ...sanitizedArgs);
+  } catch (error) {
+    console.error(`[IPC-Main] Failed to send to ${channel}:`, error);
+  }
+}
+
 class StickyNotesApp {
   private windows: Map<string, BrowserWindow> = new Map();
   private dataStore: DataStore;
@@ -148,7 +207,7 @@ class StickyNotesApp {
 
     win.webContents.once('did-finish-load', () => {
       // レンダラープロセスの初期化を確実にするため一度だけ送信
-      win.webContents.send('note-data', note);
+      safeSend(win.webContents, 'note-data', note);
     });
 
     // 開発者ツールのショートカットキーをブロック
@@ -200,7 +259,7 @@ class StickyNotesApp {
       const [x, y] = win.getPosition();
       const timers = this.pendingTimers.get(note.id)!;
       
-      console.log(`[DEBUG] Window moved - noteId: ${note.id}, position: ${x},${y}, isNewlyCreated: ${note.isNewlyCreated}`);
+      debugLog(`[DEBUG] Window moved - noteId: ${note.id}, position: ${x},${y}, isNewlyCreated: ${note.isNewlyCreated}`);
       
       // 頻繁な更新をデバウンス
       if (timers.moveTimeout) {
@@ -211,7 +270,7 @@ class StickyNotesApp {
         const currentNote = await this.dataStore.getNote(note.id);
         if (!currentNote) return;
         
-        console.log(`[DEBUG] Processing move update - noteId: ${note.id}, isActive: ${currentNote.isActive}, isNewlyCreated: ${currentNote.isNewlyCreated}`);
+        debugLog(`[DEBUG] Processing move update - noteId: ${note.id}, isActive: ${currentNote.isActive}, isNewlyCreated: ${currentNote.isNewlyCreated}`);
         
         // 新規ノートの場合、移動時にサイズを保護
         if (currentNote.isNewlyCreated) {
@@ -230,33 +289,8 @@ class StickyNotesApp {
           }
           
           if (currentWidth !== expectedWidth || currentHeight !== expectedHeight) {
-            console.log(`[DEBUG] Move: correcting size for new note ${note.id} from ${currentWidth}x${currentHeight} to ${expectedWidth}x${expectedHeight}`);
-            
-            // 強制的にサイズを修正（複数回実行で確実に適用）
+            debugLog(`[DEBUG] Move: correcting size for new note ${note.id} from ${currentWidth}x${currentHeight} to ${expectedWidth}x${expectedHeight}`);
             win.setSize(expectedWidth, expectedHeight);
-            
-            // 即座に再確認と再適用（setTimeoutで非同期実行）
-            setTimeout(() => {
-              const [recheckWidth, recheckHeight] = win.getSize();
-              if (recheckWidth !== expectedWidth || recheckHeight !== expectedHeight) {
-                console.log(`[DEBUG] Move: re-correcting size for note ${note.id} from ${recheckWidth}x${recheckHeight} to ${expectedWidth}x${expectedHeight}`);
-                win.setSize(expectedWidth, expectedHeight);
-                
-                // 最終確認（もう一度念押し）
-                setTimeout(() => {
-                  const [finalWidth, finalHeight] = win.getSize();
-                  if (finalWidth !== expectedWidth || finalHeight !== expectedHeight) {
-                    console.log(`[DEBUG] Move: final correction for note ${note.id} from ${finalWidth}x${finalHeight} to ${expectedWidth}x${expectedHeight}`);
-                    win.setBounds({
-                      x: win.getBounds().x,
-                      y: win.getBounds().y,
-                      width: expectedWidth,
-                      height: expectedHeight
-                    });
-                  }
-                }, 5);
-              }
-            }, 5);
           }
         }
         
@@ -304,7 +338,7 @@ class StickyNotesApp {
       timers.resizeTimeout = setTimeout(async () => {
         const currentNote = await this.dataStore.getNote(note.id);
         if (currentNote) {
-          console.log(`[DEBUG] Processing resize update - noteId: ${note.id}, isActive: ${currentNote.isActive}, isNewlyCreated: ${currentNote.isNewlyCreated}, size: ${width}x${height}`);
+          debugLog(`[DEBUG] Processing resize update - noteId: ${note.id}, isActive: ${currentNote.isActive}, isNewlyCreated: ${currentNote.isNewlyCreated}, size: ${width}x${height}`);
           
           // 新規ノートの場合、意図しないサイズ変更を防ぐ
           if (currentNote.isNewlyCreated) {
@@ -318,21 +352,6 @@ class StickyNotesApp {
                 
                 // 強制的にサイズを修正（複数回実行で確実に適用）
                 win.setSize(expectedWidth, expectedHeight);
-                
-                // 即座に再確認と再適用
-                setTimeout(() => {
-                  const [recheckWidth, recheckHeight] = win.getSize();
-                  if (recheckWidth !== expectedWidth || recheckHeight !== expectedHeight) {
-                    console.log(`[DEBUG] Resize: re-correcting edit size for note ${note.id} from ${recheckWidth}x${recheckHeight} to ${expectedWidth}x${expectedHeight}`);
-                    win.setBounds({
-                      x: win.getBounds().x,
-                      y: win.getBounds().y,
-                      width: expectedWidth,
-                      height: expectedHeight
-                    });
-                  }
-                }, 5);
-                
                 return;
               }
             } else {
@@ -342,23 +361,8 @@ class StickyNotesApp {
               if (width !== expectedWidth || height !== expectedHeight) {
                 console.log(`[DEBUG] New note resize prevented - restoring display size ${expectedWidth}x${expectedHeight} (was ${width}x${height})`);
                 
-                // 強制的にサイズを修正（複数回実行で確実に適用）
+                // サイズを修正
                 win.setSize(expectedWidth, expectedHeight);
-                
-                // 即座に再確認と再適用
-                setTimeout(() => {
-                  const [recheckWidth, recheckHeight] = win.getSize();
-                  if (recheckWidth !== expectedWidth || recheckHeight !== expectedHeight) {
-                    console.log(`[DEBUG] Resize: re-correcting size for note ${note.id} from ${recheckWidth}x${recheckHeight} to ${expectedWidth}x${expectedHeight}`);
-                    win.setBounds({
-                      x: win.getBounds().x,
-                      y: win.getBounds().y,
-                      width: expectedWidth,
-                      height: expectedHeight
-                    });
-                  }
-                }, 5);
-                
                 return;
               }
             }
@@ -378,11 +382,11 @@ class StickyNotesApp {
     win.on('blur', async () => {
       const currentNote = await this.dataStore.getNote(note.id);
       if (currentNote && currentNote.isActive && !currentNote.isLocked) {
-        console.log(`[DEBUG] Blur event triggered for note ${note.id}`);
+        debugLog(`[DEBUG] Blur event triggered for note ${note.id}`);
         
         // WindowStateManagerを使って重複ブラーイベントを防止
         this.windowStateManager.scheduleBlurEvent(note.id, async () => {
-          console.log(`[DEBUG] Processing blur timeout for note ${note.id}`);
+          debugLog(`[DEBUG] Processing blur timeout for note ${note.id}`);
           
           // 検索ウィンドウや設定ウィンドウがフォーカスされていないかチェック
           const searchFocused = this.searchWindow && !this.searchWindow.isDestroyed() && this.searchWindow.isFocused();
@@ -397,7 +401,7 @@ class StickyNotesApp {
             }
           }
           
-          console.log(`[DEBUG] Focus check: search=${searchFocused}, settings=${settingsFocused}, otherNote=${otherNoteFocused}`);
+          debugLog(`[DEBUG] Focus check: search=${searchFocused}, settings=${settingsFocused}, otherNote=${otherNoteFocused}`);
           
           // 付箋関連のウィンドウがフォーカスされていない場合
           if (!searchFocused && !settingsFocused && !otherNoteFocused) {
@@ -1364,8 +1368,8 @@ class StickyNotesApp {
         // 7. ウィンドウに更新された状態を通知
         const updatedNote = await this.dataStore.getNote(noteId);
         if (updatedNote) {
-          window.webContents.send('note-data', updatedNote);
-          window.webContents.send('set-active', true);
+          safeSend(window.webContents, 'note-data', updatedNote);
+          safeSend(window.webContents, 'set-active', true);
         }
         
         console.log(`[DEBUG] Note ${noteId} activated: inactive(${currentX},${currentY}) -> active(${targetX},${targetY})`);
@@ -1777,10 +1781,6 @@ class StickyNotesApp {
       },
       { type: 'separator' },
       {
-        label: 'すべての付箋を整列表示',
-        click: () => this.showAllWindows()
-      },
-      {
         label: 'すべての付箋を隠す',
         click: () => this.hideAllWindows()
       },
@@ -2027,10 +2027,10 @@ class StickyNotesApp {
               console.log(`[DEBUG] Show all hotkey pressed: ${hotkey}. Settings window open: ${this.isSettingsWindowOpen}`);
             }
             if (!this.isSettingsWindowOpen) {
-              console.log(`[DEBUG] Executing showAllWindows function`);
-              this.showAllWindows();
+              console.log(`[DEBUG] Executing showAllWindowsOnly function`);
+              this.showAllWindowsOnly();
             } else {
-              console.log(`[DEBUG] Skipping showAllWindows - settings window is open`);
+              console.log(`[DEBUG] Skipping showAllWindowsOnly - settings window is open`);
             }
           });
           
@@ -2379,12 +2379,12 @@ class StickyNotesApp {
       console.log(`[DEBUG] handleSetNoteActive: setting window ${noteId} to be always on top and focused`);
       win.setAlwaysOnTop(true, 'screen-saver', 1);
       win.focus();
-      win.webContents.send('set-active', true);
+      safeSend(win.webContents, 'set-active', true);
       
       // 更新されたノートデータをレンダラーに送信
       const updatedNote = await this.dataStore.getNote(noteId);
       if (updatedNote) {
-        win.webContents.send('note-data', updatedNote);
+        safeSend(win.webContents, 'note-data', updatedNote);
       }
       
       console.log(`[DEBUG] Activated note ${noteId}: inactive(${currentX},${currentY}) -> active(${targetX},${targetY})`);
@@ -2443,12 +2443,12 @@ class StickyNotesApp {
       // 4. ウィンドウの表示状態を更新
       console.log(`[DEBUG] handleSetNoteActive: setting window ${noteId} to not always on top and sending inactive state`);
       win.setAlwaysOnTop(false);
-      win.webContents.send('set-active', false);
+      safeSend(win.webContents, 'set-active', false);
       
       // 更新されたノートデータをレンダラーに送信
       const finalNote = await this.dataStore.getNote(noteId);
       if (finalNote) {
-        win.webContents.send('note-data', finalNote);
+        safeSend(win.webContents, 'note-data', finalNote);
       }
       
       console.log(`[DEBUG] Deactivated note ${noteId}: active(${currentX},${currentY}) -> inactive(${Math.round(targetX)},${Math.round(targetY)})`);
@@ -2615,7 +2615,7 @@ class StickyNotesApp {
                 // ノートデータをウィンドウに再送信して、データが確実に反映されるようにする
                 const updatedNote = await this.dataStore.getNote(note.id);
                 if (updatedNote) {
-                  window.webContents.send('note-data', updatedNote);
+                  safeSend(window.webContents, 'note-data', updatedNote);
                   console.log('[DEBUG] Note data resent to window:', note.id);
                 }
               }
