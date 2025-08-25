@@ -133,48 +133,14 @@ class StickyNotesApp {
       }
     });
 
-    app.on('before-quit', async (event) => {
-      if (!this.isQuitting) {
-        event.preventDefault();
-        console.log('[SAVE] App quit requested, ensuring all data is saved...');
-        
-        try {
-          // 1. 自動保存中のタイマーをすべて強制フラッシュ
-          await this.flushAllPendingData();
-          
-          // 2. データストアの保存を強制実行
-          await this.dataStore.forceFlushAll();
-          
-          // 3. すべてのレンダラープロセスに緊急保存を指示
-          for (const [noteId, window] of this.windows) {
-            if (!window.isDestroyed()) {
-              window.webContents.send('emergency-save-request');
-            }
-          }
-          
-          // 4. 少し待機してレンダラープロセスの保存完了を待つ
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // 5. ホットキーをクリーンアップ
-          this.unregisterAllHotkeys();
-          
-          console.log('[SAVE] All data saved successfully, proceeding with quit');
-          this.isQuitting = true;
-          this.hideAllWindows();
-          
-          // データ保存完了後に実際に終了
-          setTimeout(() => {
-            app.quit();
-          }, 100);
-        } catch (error) {
-          console.error('[SAVE] Error saving data before quit:', error);
-          // エラー時でも強制終了するかユーザーに確認
-          console.warn('[SAVE] Forcing quit despite save errors');
-          this.isQuitting = true;
-          app.quit();
-        }
-      }
-    });
+    // before-quitイベントを一時的に無効化
+    // app.on('before-quit', (event) => {
+    //   console.log('[BEFORE-QUIT] Event triggered - isQuitting:', this.isQuitting);
+    //   if (!this.isQuitting) {
+    //     console.log('[BEFORE-QUIT] Setting isQuitting to true and allowing quit');
+    //     this.isQuitting = true;
+    //   }
+    // });
   }
 
   private async createInitialNotes() {
@@ -1817,7 +1783,17 @@ class StickyNotesApp {
       { type: 'separator' },
       {
         label: 'アプリを終了',
-        click: () => this.quitApp()
+        click: async () => {
+          console.log('[TRAY] Exit menu clicked');
+          await this.quitApp();
+        }
+      },
+      {
+        label: '強制終了 (デバッグ)',
+        click: () => {
+          console.log('[TRAY] Force quit clicked');
+          process.exit(0);
+        }
       }
     ]);
 
@@ -1992,9 +1968,68 @@ class StickyNotesApp {
 
 
 
-  private quitApp() {
+  private async quitApp() {
+    console.log('[QUIT] quitApp() called - isQuitting:', this.isQuitting);
+    
+    if (this.isQuitting) {
+      console.log('[QUIT] Already quitting, using process.exit()');
+      process.exit(0);
+      return;
+    }
+    
+    console.log('[QUIT] Setting isQuitting and forcing quit');
     this.isQuitting = true;
-    app.quit();
+    
+    // すべてのウィンドウを強制的に閉じる
+    try {
+      console.log('[QUIT] Closing all windows...');
+      BrowserWindow.getAllWindows().forEach(window => {
+        if (!window.isDestroyed()) {
+          window.destroy();
+        }
+      });
+      
+      console.log('[QUIT] Unregistering hotkeys...');
+      this.unregisterAllHotkeys();
+    } catch (error) {
+      console.log('[QUIT] Error during cleanup:', error);
+    }
+    
+    console.log('[QUIT] Using process.exit() for reliable termination');
+    // app.quit()の代わりにprocess.exit()を使用
+    setTimeout(() => {
+      process.exit(0);
+    }, 100);
+  }
+
+  private async performGracefulShutdown(): Promise<void> {
+    console.log('[SHUTDOWN] Starting graceful shutdown...');
+    
+    try {
+      // 1. 自動保存中のタイマーをすべて強制フラッシュ
+      await this.flushAllPendingData();
+      
+      // 2. データストアの保存を強制実行
+      await this.dataStore.forceFlushAll();
+      
+      // 3. すべてのレンダラープロセスに緊急保存を指示
+      for (const [noteId, window] of this.windows) {
+        if (!window.isDestroyed()) {
+          window.webContents.send('emergency-save-request');
+        }
+      }
+      
+      // 4. レンダラープロセスの保存完了を短時間待機
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // 5. ホットキーをクリーンアップ
+      this.unregisterAllHotkeys();
+      
+      console.log('[SHUTDOWN] Graceful shutdown completed');
+    } catch (error) {
+      console.error('[SHUTDOWN] Error during graceful shutdown:', error);
+      throw error;
+    }
   }
 
   // ホットキー管理メソッド
