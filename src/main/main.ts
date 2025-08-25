@@ -1165,32 +1165,6 @@ class StickyNotesApp {
               console.error('Failed to reset active coordinates:', error);
             }
           }
-        },
-        {
-          type: 'separator'
-        },
-        {
-          label: '付箋を削除',
-          click: async () => {
-            console.log(`[DEBUG] Delete context menu item clicked for note: ${noteId}`);
-            try {
-              await this.dataStore.deleteNote(noteId);
-              
-              // 削除後、残りの付箋数をチェック
-              const remainingNotes = await this.dataStore.getAllNotes();
-              console.log(`[DEBUG] Remaining notes after deletion: ${remainingNotes.length}`);
-              
-              // 対応するウィンドウを閉じる
-              const noteWindow = this.windows.get(noteId);
-              if (noteWindow && !noteWindow.isDestroyed()) {
-                noteWindow.close();
-              }
-              
-              console.log(`[DEBUG] Note ${noteId} deleted successfully`);
-            } catch (error) {
-              console.error('Failed to delete note:', error);
-            }
-          }
         }
       ];
       
@@ -2322,26 +2296,6 @@ class StickyNotesApp {
             console.log(`[DEBUG] Active coordinates reset for note: ${noteId}`);
           } catch (error) {
             console.error('Failed to reset active coordinates:', error);
-          }
-        }
-      },
-      { type: 'separator' },
-      {
-        label: '付箋を削除',
-        click: async () => {
-          console.log(`[DEBUG] Delete menu item clicked for note: ${noteId}`);
-          try {
-            await this.dataStore.deleteNote(noteId);
-            
-            // ウィンドウを閉じる
-            const win = this.windows.get(noteId);
-            if (win) {
-              win.close();
-            }
-            
-            console.log(`[DEBUG] Note deleted successfully: ${noteId}`);
-          } catch (error) {
-            console.error('Failed to delete note:', error);
           }
         }
       }
