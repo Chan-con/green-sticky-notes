@@ -293,9 +293,9 @@ export class DataStore {
     const newNote: StickyNote = {
       id: this.generateId(),
       content: '',
-      // アクティブ状態の位置とサイズ（初回は未設定）
-      activeX: 0, // 初回アクティブ化時に設定される
-      activeY: 0, // 初回アクティブ化時に設定される
+      // アクティブ状態の位置とサイズ（編集モード用）
+      activeX: baseX, // 初期位置を設定
+      activeY: baseY, // 初期位置を設定
       activeWidth: defaultActiveWidth,
       activeHeight: defaultActiveHeight,
       // 非アクティブ状態の位置とサイズ（設定から取得）
@@ -309,7 +309,7 @@ export class DataStore {
       isPinned: nearNote ? nearNote.isPinned : false,  // 親付箋のピン設定を引き継ぐ
       isLocked: false,
       displayId: nearNote ? nearNote.displayId : '1', // 親付箋のディスプレイを引き継ぐ
-      isActive: false,
+      isActive: true,  // 新規ノートは編集モードで開始
       isNewlyCreated: true, // 新規作成フラグ
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -347,6 +347,8 @@ export class DataStore {
       if (process.env.NODE_ENV === 'development') {
         console.warn(`Note with ID ${id} not found in ${notes.length} notes`);
       }
+      // 削除されたノートへの更新試行の場合、エラーを投げる
+      throw new Error(`Cannot update note with ID ${id}: note does not exist`);
     }
   }
 

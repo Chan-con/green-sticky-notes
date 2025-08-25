@@ -158,8 +158,23 @@ class StickyNotesApp {
 
 
   private async createNoteWindow(note: StickyNote): Promise<BrowserWindow> {
-    // ウィンドウ作成時は既存の位置データを信頼し、最小限の調整のみ行う
-    const bounds = await this.calculateNoteBounds(note);
+    // 新規ノートの場合は編集モードサイズを直接使用
+    let bounds;
+    if (note.isNewlyCreated && note.isActive) {
+      bounds = {
+        x: note.activeX || 100,
+        y: note.activeY || 100,
+        width: 300,  // 編集モード固定サイズ
+        height: 200, // 編集モード固定サイズ
+        displayId: note.displayId,
+        shouldMigrate: false,
+        displayChanged: false
+      };
+      console.log(`[DEBUG] createNoteWindow: Using edit mode size for new note: ${bounds.width}x${bounds.height}`);
+    } else {
+      // 既存ノートは通常の計算を使用
+      bounds = await this.calculateNoteBounds(note);
+    }
     
     const win = new BrowserWindow({
       x: bounds.x,
@@ -196,13 +211,15 @@ class StickyNotesApp {
       safeSend(win.webContents, 'note-data', note);
     });
 
-    // 開発者ツールのショートカットキーをブロック
+    // 開発者ツールのショートカットキー（開発モードでは許可）
     win.webContents.on('before-input-event', (event, input) => {
-      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
-        event.preventDefault();
-      }
-      if (input.key === 'F12') {
-        event.preventDefault();
+      if (process.env.NODE_ENV !== 'development') {
+        if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+          event.preventDefault();
+        }
+        if (input.key === 'F12') {
+          event.preventDefault();
+        }
       }
     });
 
@@ -233,6 +250,18 @@ class StickyNotesApp {
             this.resetNoteActiveCoordinates(note.id);
           }
         });
+      }
+      
+      // 開発モードでのみ開発者ツールショートカット（Ctrl+Shift+I）を有効化
+      if (process.env.NODE_ENV === 'development' && input.type === 'keyDown') {
+        if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+          console.log('[DEBUG] Developer tools shortcut pressed for note:', note.id);
+          win.webContents.openDevTools();
+        }
+        if (input.key === 'F12') {
+          console.log('[DEBUG] F12 pressed for note:', note.id);
+          win.webContents.openDevTools();
+        }
       }
     });
 
@@ -326,37 +355,15 @@ class StickyNotesApp {
         if (currentNote) {
           debugLog(`[DEBUG] Processing resize update - noteId: ${note.id}, isActive: ${currentNote.isActive}, isNewlyCreated: ${currentNote.isNewlyCreated}, size: ${width}x${height}`);
           
-          // 新規ノートの場合、意図しないサイズ変更を防ぐ
-          if (currentNote.isNewlyCreated) {
-            const settings = await this.dataStore.getSettings();
-            if (currentNote.isActive) {
-              // アクティブモードでは編集サイズを維持
-              const expectedWidth = 300;
-              const expectedHeight = 200;
-              if (width !== expectedWidth || height !== expectedHeight) {
-                console.log(`[DEBUG] New note resize prevented - restoring edit size ${expectedWidth}x${expectedHeight} (was ${width}x${height})`);
-                
-                // 強制的にサイズを修正（複数回実行で確実に適用）
-                win.setSize(expectedWidth, expectedHeight);
-                return;
-              }
-            } else {
-              // 非アクティブモードでは表示サイズを維持
-              const expectedWidth = settings.defaultInactiveWidth || 120;
-              const expectedHeight = settings.defaultInactiveHeight || 88;
-              if (width !== expectedWidth || height !== expectedHeight) {
-                console.log(`[DEBUG] New note resize prevented - restoring display size ${expectedWidth}x${expectedHeight} (was ${width}x${height})`);
-                
-                // サイズを修正
-                win.setSize(expectedWidth, expectedHeight);
-                return;
-              }
-            }
-          }
-          
-          // アクティブ・非アクティブに関係なくサイズを記録
+          // 通常のサイズ変更を記録（新規ノートかどうかに関係なく）
           await this.dataStore.updateNoteSize(note.id, width, height, currentNote.isActive);
-          console.log(`[DEBUG] Resize update completed for note ${note.id}`);
+          console.log(`[DEBUG] Resize update completed for note ${note.id}: ${width}x${height} (active: ${currentNote.isActive})`);
+          
+          // 新規ノートフラグが残っている場合はクリア
+          if (currentNote.isNewlyCreated) {
+            await this.dataStore.updateNote(note.id, { isNewlyCreated: false });
+            console.log(`[DEBUG] Clearing isNewlyCreated flag after resize for note: ${note.id}`);
+          }
         }
         
         // タイマーをクリア
@@ -503,8 +510,15 @@ class StickyNotesApp {
     // アクティブ/非アクティブ状態に応じて位置とサイズを取得
     let x, y, width, height;
     
-    if (note.isActive) {
-      // アクティブ状態の場合
+    // 新規ノートの場合は編集モードサイズを強制適用
+    if (note.isNewlyCreated && note.isActive) {
+      x = note.activeX || note.inactiveX || 100;
+      y = note.activeY || note.inactiveY || 100;
+      width = 300; // 編集モード固定サイズ
+      height = 200; // 編集モード固定サイズ
+      console.log(`[DEBUG] calculateNoteBounds - using edit mode size for new note: ${width}x${height}`);
+    } else if (note.isActive) {
+      // 既存ノートのアクティブ状態
       if (note.activeX !== 0 && note.activeY !== 0) {
         // すでにアクティブ位置が設定されている場合はそのまま使用
         x = note.activeX;
@@ -517,35 +531,30 @@ class StickyNotesApp {
       width = note.activeWidth || 300;
       height = note.activeHeight || 200;
     } else {
-      // 非アクティブ状態は記録された位置を正確に復元
+      // 非アクティブ状態の位置とサイズ
       x = note.inactiveX || 100;
       y = note.inactiveY || 100;
-      // 設定からデフォルトサイズを取得
-      const settings = await this.dataStore.getSettings();
-      width = note.inactiveWidth || settings.defaultInactiveWidth || 150;
-      height = note.inactiveHeight || settings.defaultInactiveHeight || 100;
+      
+      // 非アクティブサイズの決定
+      if (note.inactiveWidth && note.inactiveHeight) {
+        // 既存の保存されたサイズを使用
+        width = note.inactiveWidth;
+        height = note.inactiveHeight;
+        console.log('[DEBUG] calculateNoteBounds - using saved inactive size:', width, 'x', height, 'for note:', note.id);
+      } else {
+        // サイズが保存されていない場合は設定から取得
+        const settings = await this.dataStore.getSettings();
+        width = settings.defaultInactiveWidth || 150;
+        height = settings.defaultInactiveHeight || 100;
+        console.log('[DEBUG] calculateNoteBounds - using default inactive size:', width, 'x', height, 'for note:', note.id);
+      }
     }
 
     // 数値型を確実にする
     x = Number(x) || 100;
     y = Number(y) || 100;
-    if (note.isActive) {
-      width = Number(width) || 300;
-      height = Number(height) || 200;
-    } else {
-      // 非アクティブモードでは、新規作成時は設定値、既存は保持
-      // 新規作成かどうかは isNewlyCreated フラグで判定
-      if (note.isNewlyCreated) {
-        const settings = await this.dataStore.getSettings();
-        width = settings.defaultInactiveWidth || 150;
-        height = settings.defaultInactiveHeight || 100;
-        console.log('[DEBUG] calculateNoteBounds - new note, using settings:', width, 'x', height);
-      } else {
-        width = note.inactiveWidth;
-        height = note.inactiveHeight;
-        console.log('[DEBUG] calculateNoteBounds - existing note, using stored size:', width, 'x', height, 'for note:', note.id);
-      }
-    }
+    width = Number(width) || (note.isActive ? 300 : 150);
+    height = Number(height) || (note.isActive ? 200 : 100);
 
     // 実際の位置からディスプレイを検出（より正確な方法）
     const actualDisplay = this.findDisplayContainingPoint(x, y);
@@ -798,43 +807,51 @@ class StickyNotesApp {
     });
 
     ipcMain.handle('delete-note', async (_, noteId: string) => {
-      const win = this.windows.get(noteId);
-      if (win) {
-        win.close();
-      }
-      
-      // 検索インデックスから削除
-      this.searchService.removeNoteFromIndex(noteId);
-      
-      await this.dataStore.deleteNote(noteId);
-      
-      // 削除後、残りの付箋数をチェック
-      const remainingNotes = await this.dataStore.getAllNotes();
-      if (remainingNotes.length === 0) {
-        // 左上に新規付箋を作成
-        const display = screen.getPrimaryDisplay();
-        const newNote = await this.dataStore.createNote();
+      try {
+        // データストアから削除（最初に実行）
+        await this.dataStore.deleteNote(noteId);
         
-        // 左上位置に設定（非アクティブ位置のみ）
-        await this.dataStore.updateNote(newNote.id, {
-          inactiveX: display.bounds.x + 50,
-          inactiveY: display.bounds.y + 50,
-          isActive: false
-        });
+        // 検索インデックスから削除
+        this.searchService.removeNoteFromIndex(noteId);
         
-        const finalNote = await this.dataStore.getNote(newNote.id);
-        if (finalNote) {
-          // 作成位置のディスプレイIDを設定
-          const noteDisplay = this.findDisplayContainingPoint(finalNote.inactiveX, finalNote.inactiveY);
-          if (noteDisplay.id.toString() !== finalNote.displayId) {
-            await this.dataStore.updateNote(newNote.id, { displayId: noteDisplay.id.toString() });
-          }
-          
-          await this.createNoteWindow(finalNote);
+        // ウィンドウを閉じる（データ削除後）
+        const win = this.windows.get(noteId);
+        if (win && !win.isDestroyed()) {
+          win.destroy(); // close()ではなくdestroy()を使用
+          this.windows.delete(noteId);
         }
+        
+        // 削除後、残りの付箋数をチェック
+        const remainingNotes = await this.dataStore.getAllNotes();
+        if (remainingNotes.length === 0) {
+          // 左上に新規付箋を作成
+          const display = screen.getPrimaryDisplay();
+          const newNote = await this.dataStore.createNote();
+          
+          // 左上位置に設定（非アクティブ位置のみ）
+          await this.dataStore.updateNote(newNote.id, {
+            inactiveX: display.bounds.x + 50,
+            inactiveY: display.bounds.y + 50,
+            isActive: false
+          });
+          
+          const finalNote = await this.dataStore.getNote(newNote.id);
+          if (finalNote) {
+            // 作成位置のディスプレイIDを設定
+            const noteDisplay = this.findDisplayContainingPoint(finalNote.inactiveX, finalNote.inactiveY);
+            if (noteDisplay.id.toString() !== finalNote.displayId) {
+              await this.dataStore.updateNote(newNote.id, { displayId: noteDisplay.id.toString() });
+            }
+            
+            await this.createNoteWindow(finalNote);
+          }
+        }
+        
+        return true;
+      } catch (error) {
+        console.error(`[ERROR] Main process: Failed to delete note ${noteId}:`, error);
+        throw error;
       }
-      
-      return true;
     });
 
     ipcMain.handle('set-note-active', async (_, noteId: string, isActive: boolean) => {
@@ -885,13 +902,14 @@ class StickyNotesApp {
         updates.inactiveX = currentX;
         updates.inactiveY = currentY;
         
-        // 新規作成ノートの場合は設定のサイズを使用、既存ノートは現在のサイズを保存
+        // 新規ノートの場合は設定のサイズを使用、既存ノートは現在のサイズを保存
         if (note.isNewlyCreated) {
           const settings = await this.dataStore.getSettings();
           updates.inactiveWidth = settings.defaultInactiveWidth || 120;
           updates.inactiveHeight = settings.defaultInactiveHeight || 88;
+          updates.isNewlyCreated = false; // アクティブ化時に新規作成フラグをクリア
           console.log(`[DEBUG] Saving inactive state (new note): ${currentX},${currentY} size:${updates.inactiveWidth}x${updates.inactiveHeight} for note:${noteId}`);
-          // 新規ノートのisNewlyCreatedフラグはアクティブ化時にはクリアしない（移動完了後の非アクティブ化まで保持）
+          console.log(`[DEBUG] Clearing isNewlyCreated flag after activation for note:${noteId}`);
         } else {
           updates.inactiveWidth = currentWidth;
           updates.inactiveHeight = currentHeight;
@@ -969,12 +987,6 @@ class StickyNotesApp {
         
         // 状態変更完了を通知
         this.windowStateManager.completeStateChange(noteId, isActive);
-        
-        // 非アクティブ化完了後にフラグクリア
-        if (!isActive && note.isNewlyCreated) {
-          await this.dataStore.updateNote(noteId, { isNewlyCreated: false });
-          console.log(`[DEBUG] Clearing isNewlyCreated flag after deactivation for note:${noteId}`);
-        }
       }
     });
 
@@ -1130,6 +1142,32 @@ class StickyNotesApp {
               console.log(`[DEBUG] Active coordinates reset for note: ${noteId}`);
             } catch (error) {
               console.error('Failed to reset active coordinates:', error);
+            }
+          }
+        },
+        {
+          type: 'separator'
+        },
+        {
+          label: '付箋を削除',
+          click: async () => {
+            console.log(`[DEBUG] Delete context menu item clicked for note: ${noteId}`);
+            try {
+              await this.dataStore.deleteNote(noteId);
+              
+              // 削除後、残りの付箋数をチェック
+              const remainingNotes = await this.dataStore.getAllNotes();
+              console.log(`[DEBUG] Remaining notes after deletion: ${remainingNotes.length}`);
+              
+              // 対応するウィンドウを閉じる
+              const noteWindow = this.windows.get(noteId);
+              if (noteWindow && !noteWindow.isDestroyed()) {
+                noteWindow.close();
+              }
+              
+              console.log(`[DEBUG] Note ${noteId} deleted successfully`);
+            } catch (error) {
+              console.error('Failed to delete note:', error);
             }
           }
         }
@@ -2272,8 +2310,45 @@ class StickyNotesApp {
             console.error('Failed to reset active coordinates:', error);
           }
         }
+      },
+      { type: 'separator' },
+      {
+        label: '付箋を削除',
+        click: async () => {
+          console.log(`[DEBUG] Delete menu item clicked for note: ${noteId}`);
+          try {
+            await this.dataStore.deleteNote(noteId);
+            
+            // ウィンドウを閉じる
+            const win = this.windows.get(noteId);
+            if (win) {
+              win.close();
+            }
+            
+            console.log(`[DEBUG] Note deleted successfully: ${noteId}`);
+          } catch (error) {
+            console.error('Failed to delete note:', error);
+          }
+        }
       }
     ];
+
+    // 開発モードでは開発者ツールメニューを追加
+    if (process.env.NODE_ENV === 'development') {
+      menuTemplate.push(
+        { type: 'separator' },
+        {
+          label: '開発者ツールを開く',
+          click: () => {
+            const win = this.windows.get(noteId);
+            if (win) {
+              win.webContents.openDevTools();
+              console.log(`[DEBUG] Developer tools opened for note: ${noteId}`);
+            }
+          }
+        }
+      );
+    }
 
     const menu = Menu.buildFromTemplate(menuTemplate);
     menu.popup();
@@ -2394,40 +2469,31 @@ class StickyNotesApp {
         isActive: true
       });
       
-      // 2. アクティブ座標を使用（保存されていない場合は現在位置）
-      let targetX = note.activeX;
-      let targetY = note.activeY;
-      let targetWidth: number;
-      let targetHeight: number;
+      // アクティブ化時は常に編集モードサイズ（300x200）を使用
+      const editWidth = 300;
+      const editHeight = 200;
       
-      // アクティブ化時は編集モード用のサイズを使用
-      if (note.isNewlyCreated) {
-        targetWidth = 300; // 編集モード用のデフォルト幅
-        targetHeight = 200; // 編集モード用のデフォルト高さ
-        console.log(`[DEBUG] handleSetNoteActive: New note activation - using edit mode size ${targetWidth}x${targetHeight}`);
-      } else {
-        targetWidth = note.activeWidth || 300;
-        targetHeight = note.activeHeight || 200;
-      }
+      console.log(`[DEBUG] handleSetNoteActive: Activating note ${noteId} - using edit size ${editWidth}x${editHeight}`);
       
-      if (typeof targetX !== 'number' || typeof targetY !== 'number') {
-        targetX = currentX;
-        targetY = currentY;
-        // 初回の場合のみアクティブ座標を設定
-        await this.dataStore.updateNote(noteId, {
-          activeX: targetX,
-          activeY: targetY,
-          activeWidth: targetWidth,
-          activeHeight: targetHeight
-        });
-      }
+      // 位置は現在位置を維持
+      const targetX = currentX;
+      const targetY = currentY;
       
-      // 3. ウィンドウをアクティブ位置・サイズに設定
+      // アクティブ位置・サイズを更新
+      await this.dataStore.updateNote(noteId, {
+        activeX: targetX,
+        activeY: targetY,
+        activeWidth: editWidth,
+        activeHeight: editHeight,
+        isActive: true
+      });
+      
+      // ウィンドウサイズを編集モードに設定
       win.setBounds({
-        x: Math.round(targetX),
-        y: Math.round(targetY),
-        width: Math.round(targetWidth),
-        height: Math.round(targetHeight)
+        x: targetX,
+        y: targetY,
+        width: editWidth,
+        height: editHeight
       });
 
       // 4. ウィンドウの表示状態を更新
@@ -2454,18 +2520,11 @@ class StickyNotesApp {
         isActive: false
       };
 
-      // 新規ノートの場合、編集モード用のサイズを保存（現在のサイズに関係なく）
-      if (note.isNewlyCreated) {
-        // 新規ノートは編集モード用のサイズを保存
-        updates.activeWidth = 300;
-        updates.activeHeight = 200;
-        console.log(`[DEBUG] handleSetNoteActive: Saving active state (new note, enforced edit mode size): ${currentX},${currentY} size:${updates.activeWidth}x${updates.activeHeight} for note:${noteId}`);
-      } else {
-        // 既存ノートは現在のサイズを保存
-        updates.activeWidth = currentWidth;
-        updates.activeHeight = currentHeight;
-        console.log(`[DEBUG] handleSetNoteActive: Saving active state (existing note): ${currentX},${currentY} size:${currentWidth}x${currentHeight} for note:${noteId}`);
-      }
+      // 新規ノートかどうかに関わらず、現在のサイズを保存
+      updates.activeWidth = currentWidth;
+      updates.activeHeight = currentHeight;
+      console.log(`[DEBUG] handleSetNoteActive: Saving active state: ${currentX},${currentY} size:${currentWidth}x${currentHeight} for note:${noteId}`);
+      
       await this.dataStore.updateNote(noteId, updates);
       
       // 2. 非アクティブ座標とサイズを計算

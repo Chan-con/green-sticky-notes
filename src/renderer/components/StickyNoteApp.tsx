@@ -36,12 +36,12 @@ export const StickyNoteApp: React.FC = memo(() => {
       try {
         const savedSettings = await window.electronAPI.getSettings();
         if (process.env.NODE_ENV === 'development') {
-          console.log('設定読み込み完了:', savedSettings);
-          console.log('非アクティブフォントサイズ設定:', savedSettings?.defaultInactiveFontSize);
+          console.log('[DEBUG] Settings loaded successfully:', savedSettings);
+          console.log('[DEBUG] Inactive font size setting:', savedSettings?.defaultInactiveFontSize);
         }
         setSettings(savedSettings);
       } catch (error) {
-        console.error('設定の読み込みに失敗しました:', error);
+        console.error('[ERROR] Failed to load settings:', error);
         // デフォルト設定
         setSettings({
           defaultFontSize: 14,
@@ -69,13 +69,43 @@ export const StickyNoteApp: React.FC = memo(() => {
         setIsLoading(false);
         clearTimeout(loadingTimeout);
         
-        // 非アクティブ状態で空の付箋を自動削除（新規作成フラグがない場合のみ）
-        if (!noteData.isActive && !noteData.isNewlyCreated) {
-          const isEmpty = !getContentAsString(noteData.content).trim();
+        // 非アクティブ状態で空の付箋を自動削除
+        if (!noteData.isActive) {
+          const isEmpty = isReallyEmpty(noteData.content);
+          
+          console.log('[DEBUG] Checking empty note deletion:', {
+            id: noteData.id,
+            isNewlyCreated: noteData.isNewlyCreated,
+            contentType: typeof noteData.content,
+            contentString: JSON.stringify(getContentAsString(noteData.content)),
+            isEmpty: isEmpty
+          });
+          
+          // 新規作成された付箋は削除しない（ユーザーがまだ入力していない可能性があるため）
+          if (noteData.isNewlyCreated) {
+            console.log('[DEBUG] Skipping deletion - note is newly created');
+            return;
+          }
           
           if (isEmpty) {
             console.log('[DEBUG] Auto-deleting empty inactive note:', noteData.id);
+            // 削除前にすべてのタイマーとイベントリスナーをクリア
+            if (saveTimeoutRef.current) {
+              clearTimeout(saveTimeoutRef.current);
+              saveTimeoutRef.current = undefined;
+            }
+            if (autoSaveIntervalRef.current) {
+              clearInterval(autoSaveIntervalRef.current);
+              autoSaveIntervalRef.current = undefined;
+            }
+            if (blurTimeoutRef.current) {
+              clearTimeout(blurTimeoutRef.current);
+              blurTimeoutRef.current = undefined;
+            }
+            // ノート削除実行
             window.electronAPI.deleteNote(noteData.id);
+            // このウィンドウを閉じる（削除されたノートなので表示する必要なし）
+            window.close();
             return;
           }
         }
@@ -159,25 +189,74 @@ export const StickyNoteApp: React.FC = memo(() => {
     
     // キーボードイベントハンドラー
     const handleKeyDown = (event: KeyboardEvent) => {
+      // デバッグ: すべてのキーイベントをログ出力（開発モードのみ）
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DEBUG] Key pressed:', {
+          key: event.key,
+          code: event.code,
+          isActive: isActive,
+          hasNote: !!note,
+          isLocked: note?.isLocked,
+          ctrlKey: event.ctrlKey,
+          altKey: event.altKey,
+          shiftKey: event.shiftKey
+        });
+      }
+
       // ESC１回でアクティブモード終了（ロックされていない場合のみ）
       if (event.key === 'Escape' && isActive && note && !note.isLocked) {
         event.preventDefault();
+        console.log('[DEBUG] ESC key detected - processing deactivation');
         
-        // 空の付箋は削除（新規作成フラグがない場合のみ）
-        const isEmpty = !getContentAsString(note.content).trim();
-        if (isEmpty && !note.isNewlyCreated) {
+        // 空の付箋は削除
+        const isEmpty = isReallyEmpty(note.content);
+        
+        console.log('[DEBUG] ESC key - checking empty note deletion:', {
+          id: note.id,
+          isEmpty: isEmpty
+        });
+
+        if (isEmpty) {
           console.log('[DEBUG] Deleting empty note on ESC');
+          
+          // すべてのタイマーをクリア
+          if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = undefined;
+          }
+          if (autoSaveIntervalRef.current) {
+            clearInterval(autoSaveIntervalRef.current);
+            autoSaveIntervalRef.current = undefined;
+          }
+          
           window.electronAPI.deleteNote(note.id);
+          
+          // 少し待ってからウィンドウを閉じる
+          setTimeout(() => {
+            window.close();
+          }, 100);
+          
           return;
         }
-        
+
         // 状態変更を同期的に実行
         setIsTransitioning(true);
-        window.electronAPI.setNoteActive(note.id, false).then(() => {
-          // バックエンドの状態変更完了後にUIを更新
-          setIsActive(false);
-          setIsTransitioning(false);
-        });
+        window.electronAPI.setNoteActive(note.id, false)
+          .then(() => {
+            // バックエンドの状態変更完了後にUIを更新
+            setIsActive(false);
+            setIsTransitioning(false);
+            console.log('[DEBUG] ESC key deactivation completed successfully');
+          })
+          .catch((error) => {
+            console.error('[ERROR] Failed to deactivate note on ESC:', error);
+            // 付箋が存在しない場合は、ウィンドウを閉じる
+            if (error instanceof Error && error.message.includes('does not exist')) {
+              console.log('[DEBUG] Note no longer exists during ESC, closing window');
+              window.close();
+            }
+            setIsTransitioning(false);
+          });
         return;
       }
 
@@ -231,6 +310,15 @@ export const StickyNoteApp: React.FC = memo(() => {
             lastSaveRef.current = Date.now();
             console.log('[SAVE] Auto-save completed successfully');
           } catch (error) {
+            // 削除されたノートの場合は自動保存を停止
+            if (error instanceof Error && error.message.includes('note does not exist')) {
+              console.log('[SAVE] Auto-save stopped - note was deleted');
+              if (autoSaveIntervalRef.current) {
+                clearInterval(autoSaveIntervalRef.current);
+                autoSaveIntervalRef.current = undefined;
+              }
+              return;
+            }
             console.error('[SAVE] Auto-save failed:', error);
           } finally {
             isSavingRef.current = false;
@@ -264,6 +352,12 @@ export const StickyNoteApp: React.FC = memo(() => {
           lastSaveRef.current = Date.now();
           console.log('[SAVE] Emergency save completed successfully');
         } catch (error) {
+          // 削除されたノートの場合は保存を停止
+          if (error instanceof Error && error.message.includes('note does not exist')) {
+            console.log('[SAVE] Emergency save skipped - note was deleted');
+            return;
+          }
+          
           console.error('[SAVE] Emergency save failed:', error);
           // 緊急時は複数回試行
           for (let i = 0; i < 3; i++) {
@@ -274,6 +368,11 @@ export const StickyNoteApp: React.FC = memo(() => {
               lastSaveRef.current = Date.now();
               break;
             } catch (retryError) {
+              // 削除されたノートの場合は再試行も停止
+              if (retryError instanceof Error && retryError.message.includes('note does not exist')) {
+                console.log('[SAVE] Emergency save retry skipped - note was deleted');
+                return;
+              }
               console.error(`[SAVE] Emergency save attempt ${i + 2} failed:`, retryError);
             }
           }
@@ -451,7 +550,10 @@ export const StickyNoteApp: React.FC = memo(() => {
   }, [note?.backgroundColor, note?.headerColor]);
 
   const updateNoteContent = async (content: string) => {
-    if (!note) return;
+    if (!note) {
+      console.log('[DEBUG] updateNoteContent: note is null, skipping update');
+      return;
+    }
 
     setNote(prev => prev ? { ...prev, content } : null);
 
@@ -466,7 +568,14 @@ export const StickyNoteApp: React.FC = memo(() => {
       lastSaveRef.current = Date.now();
     } catch (error) {
       console.error('Failed to save note content:', error);
-      // ユーザーにエラーを通知（将来的にUIで表示可能）
+      
+      // 付箋が存在しない場合は、ウィンドウを閉じる
+      if (error instanceof Error && error.message.includes('does not exist')) {
+        console.log('[DEBUG] Note no longer exists during content update, closing window');
+        window.close();
+        return;
+      }
+      
       // エラー時は再試行タイマーを設定
       saveTimeoutRef.current = setTimeout(async () => {
         try {
@@ -475,16 +584,34 @@ export const StickyNoteApp: React.FC = memo(() => {
           console.log('Retry save successful');
         } catch (retryError) {
           console.error('Retry save also failed:', retryError);
+          // 再試行でも失敗し、付箋が存在しない場合はウィンドウを閉じる
+          if (retryError instanceof Error && retryError.message.includes('does not exist')) {
+            console.log('[DEBUG] Note no longer exists during retry, closing window');
+            window.close();
+          }
         }
       }, 1000);
     }
   };
 
   const updateNoteSetting = async (updates: Partial<StickyNote>) => {
-    if (!note) return;
+    if (!note) {
+      console.log('[DEBUG] updateNoteSetting: note is null, skipping update');
+      return;
+    }
 
-    setNote(prev => prev ? { ...prev, ...updates } : null);
-    await window.electronAPI.updateNote(note.id, updates);
+    // 付箋が削除されていないかチェック
+    try {
+      setNote(prev => prev ? { ...prev, ...updates } : null);
+      await window.electronAPI.updateNote(note.id, updates);
+    } catch (error) {
+      console.error('[ERROR] Failed to update note:', error);
+      // 付箋が存在しない場合は、ウィンドウを閉じる
+      if (error instanceof Error && error.message.includes('does not exist')) {
+        console.log('[DEBUG] Note no longer exists, closing window');
+        window.close();
+      }
+    }
   };
 
   const handleNoteClick = async () => {
@@ -503,6 +630,11 @@ export const StickyNoteApp: React.FC = memo(() => {
         }, 100);
       } catch (error) {
         console.error('Failed to activate note:', error);
+        // 付箋が存在しない場合は、ウィンドウを閉じる
+        if (error instanceof Error && error.message.includes('does not exist')) {
+          console.log('[DEBUG] Note no longer exists during activation, closing window');
+          window.close();
+        }
       } finally {
         setIsTransitioning(false);
       }
@@ -519,6 +651,35 @@ export const StickyNoteApp: React.FC = memo(() => {
       .join('\n');
   };
 
+  // 確実な空判定関数
+  const isReallyEmpty = (content: string | RichContent): boolean => {
+    if (!content) return true;
+    
+    let textContent = '';
+    if (typeof content === 'string') {
+      textContent = content;
+    } else {
+      textContent = content.blocks
+        .filter(block => block.type === 'text')
+        .map(block => block.content || '')
+        .join('');
+    }
+    
+    // HTMLタグを完全に除去し、エンティティもデコード
+    const cleanText = textContent
+      .replace(/<[^>]*>/g, '')  // HTMLタグ除去
+      .replace(/&nbsp;/g, ' ')  // &nbsp;を空白に
+      .replace(/&amp;/g, '&')   // エンティティをデコード
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim();
+    
+    const isEmpty = cleanText.length === 0;
+    console.log(`[DEBUG] isReallyEmpty - original: "${textContent}", clean: "${cleanText}", isEmpty: ${isEmpty}`);
+    return isEmpty;
+  };
+
   // ブラーイベントのデバウンス用のタイムアウト
   const blurTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -531,20 +692,57 @@ export const StickyNoteApp: React.FC = memo(() => {
       
       // デバウンスでブラー処理を実行
       blurTimeoutRef.current = setTimeout(async () => {
-        const isEmpty = !getContentAsString(note.content).trim();
+        if (!note) {
+          console.log('[DEBUG] Blur event: note is null, skipping');
+          return;
+        }
         
-        if (isEmpty && !note.isNewlyCreated) {
+        const isEmpty = isReallyEmpty(note.content);
+        
+        console.log('[DEBUG] Blur event - checking empty note deletion:', {
+          id: note.id,
+          isEmpty: isEmpty
+        });
+
+        if (isEmpty) {
           console.log('[DEBUG] Deleting empty note on blur');
+          
+          // すべてのタイマーをクリア
+          if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = undefined;
+          }
+          if (autoSaveIntervalRef.current) {
+            clearInterval(autoSaveIntervalRef.current);
+            autoSaveIntervalRef.current = undefined;
+          }
+          
           window.electronAPI.deleteNote(note.id);
+          
+          // 少し待ってからウィンドウを閉じる
+          setTimeout(() => {
+            window.close();
+          }, 100);
+          
           return;
         }
 
-        // 状態変更を同期的に実行
-        setIsTransitioning(true);
-        await window.electronAPI.setNoteActive(note.id, false);
-        // バックエンドの状態変更完了後にUIを更新
-        setIsActive(false);
-        setIsTransitioning(false);
+        try {
+          // 状態変更を同期的に実行
+          setIsTransitioning(true);
+          await window.electronAPI.setNoteActive(note.id, false);
+          // バックエンドの状態変更完了後にUIを更新
+          setIsActive(false);
+          setIsTransitioning(false);
+        } catch (error) {
+          console.error('[ERROR] Failed to deactivate note:', error);
+          // 付箋が存在しない場合は、ウィンドウを閉じる
+          if (error instanceof Error && error.message.includes('does not exist')) {
+            console.log('[DEBUG] Note no longer exists during blur, closing window');
+            window.close();
+          }
+          setIsTransitioning(false);
+        }
       }, 150); // ブラーイベントのデバウンス
     }
   }, [isActive, note]);
@@ -571,16 +769,34 @@ export const StickyNoteApp: React.FC = memo(() => {
   const togglePin = async () => {
     if (!note) return;
     
-    const newPinState = !note.isPinned;
-    await updateNoteSetting({ isPinned: newPinState });
-    await window.electronAPI.setNotePin(note.id, newPinState);
+    try {
+      const newPinState = !note.isPinned;
+      await updateNoteSetting({ isPinned: newPinState });
+      await window.electronAPI.setNotePin(note.id, newPinState);
+    } catch (error) {
+      console.error('Failed to toggle pin:', error);
+      // 付箋が存在しない場合は、ウィンドウを閉じる
+      if (error instanceof Error && error.message.includes('does not exist')) {
+        console.log('[DEBUG] Note no longer exists during pin toggle, closing window');
+        window.close();
+      }
+    }
   };
 
   const toggleLock = async () => {
     if (!note) return;
     
-    const newLockState = !note.isLocked;
-    await updateNoteSetting({ isLocked: newLockState });
+    try {
+      const newLockState = !note.isLocked;
+      await updateNoteSetting({ isLocked: newLockState });
+    } catch (error) {
+      console.error('Failed to toggle lock:', error);
+      // 付箋が存在しない場合は、ウィンドウを閉じる
+      if (error instanceof Error && error.message.includes('does not exist')) {
+        console.log('[DEBUG] Note no longer exists during lock toggle, closing window');
+        window.close();
+      }
+    }
   };
 
   if (loadingError) {
@@ -632,12 +848,6 @@ export const StickyNoteApp: React.FC = memo(() => {
         onTogglePin={togglePin}
         onToggleLock={toggleLock}
       />
-      {/* デバッグ情報 */}
-      {process.env.NODE_ENV === 'development' && (
-        <div style={{fontSize: '10px', color: 'red', position: 'absolute', top: '0', right: '0', background: 'white', padding: '2px'}}>
-          RenderKey: {renderKey}, IconSize: {settings?.headerIconSize ?? 16}
-        </div>
-      )}
       
       <NoteContent
         note={note}
