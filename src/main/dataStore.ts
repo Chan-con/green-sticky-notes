@@ -294,8 +294,9 @@ export class DataStore {
       id: this.generateId(),
       content: '',
       // アクティブ状態の位置とサイズ（編集モード用）
-      activeX: baseX, // 初期位置を設定
-      activeY: baseY, // 初期位置を設定
+      // 新規ノートのactiveX/Yは未設定にして、初回アクティブ化時に現在位置を使用
+      activeX: 0, // 未設定を示す値
+      activeY: 0, // 未設定を示す値
       activeWidth: defaultActiveWidth,
       activeHeight: defaultActiveHeight,
       // 非アクティブ状態の位置とサイズ（設定から取得）

@@ -162,15 +162,15 @@ class StickyNotesApp {
     let bounds;
     if (note.isNewlyCreated && note.isActive) {
       bounds = {
-        x: note.activeX || 100,
-        y: note.activeY || 100,
+        x: note.inactiveX || 100,  // 新規ノートは非アクティブ座標を初期位置として使用
+        y: note.inactiveY || 100,  // 新規ノートは非アクティブ座標を初期位置として使用
         width: 300,  // 編集モード固定サイズ
         height: 200, // 編集モード固定サイズ
         displayId: note.displayId,
         shouldMigrate: false,
         displayChanged: false
       };
-      console.log(`[DEBUG] createNoteWindow: Using edit mode size for new note: ${bounds.width}x${bounds.height}`);
+      console.log(`[DEBUG] createNoteWindow: Using edit mode size for new note at (${bounds.x},${bounds.y}): ${bounds.width}x${bounds.height}`);
     } else {
       // 既存ノートは通常の計算を使用
       bounds = await this.calculateNoteBounds(note);
@@ -523,10 +523,31 @@ class StickyNotesApp {
         // すでにアクティブ位置が設定されている場合はそのまま使用
         x = note.activeX;
         y = note.activeY;
+        console.log(`[DEBUG] calculateNoteBounds - using stored active position (${x}, ${y})`);
       } else {
-        // 初回アクティブ化の場合は現在位置をそのまま維持（境界チェックも最小限に）
-        x = currentWindowX !== undefined ? currentWindowX : (note.inactiveX || 100);
-        y = currentWindowY !== undefined ? currentWindowY : (note.inactiveY || 100);
+        // activeX/Y が未設定（0）の場合は、現在のウィンドウ位置を使用
+        console.log(`[DEBUG] calculateNoteBounds - activeX/Y unset (0), using current position`);
+        
+        // まず現在のウィンドウ位置を取得
+        if (currentWindowX !== undefined && currentWindowY !== undefined) {
+          x = currentWindowX;
+          y = currentWindowY;
+          console.log(`[DEBUG] calculateNoteBounds - using provided current position (${x}, ${y})`);
+        } else {
+          // currentWindow位置が提供されていない場合は、ウィンドウを検索
+          const window = this.windows.get(note.id);
+          if (window && !window.isDestroyed()) {
+            const currentBounds = window.getBounds();
+            x = currentBounds.x;
+            y = currentBounds.y;
+            console.log(`[DEBUG] calculateNoteBounds - using window bounds position (${x}, ${y})`);
+          } else {
+            // ウィンドウが存在しない場合は非アクティブ座標を使用
+            x = note.inactiveX || 100;
+            y = note.inactiveY || 100;
+            console.log(`[DEBUG] calculateNoteBounds - no window found, using inactive position (${x}, ${y})`);
+          }
+        }
       }
       width = note.activeWidth || 300;
       height = note.activeHeight || 200;
@@ -2475,11 +2496,11 @@ class StickyNotesApp {
       
       console.log(`[DEBUG] handleSetNoteActive: Activating note ${noteId} - using edit size ${editWidth}x${editHeight}`);
       
-      // 位置は現在位置を維持
+      // 位置は現在位置を維持（新規ノートでも移動済みの位置を使用）
       const targetX = currentX;
       const targetY = currentY;
       
-      // アクティブ位置・サイズを更新
+      // アクティブ位置・サイズを必ず現在位置で更新（新規ノートの場合は初期設定）
       await this.dataStore.updateNote(noteId, {
         activeX: targetX,
         activeY: targetY,
@@ -2487,6 +2508,8 @@ class StickyNotesApp {
         activeHeight: editHeight,
         isActive: true
       });
+      
+      console.log(`[DEBUG] handleSetNoteActive: Set activeX/Y to current position (${targetX}, ${targetY}) for note ${noteId}`);
       
       // ウィンドウサイズを編集モードに設定
       win.setBounds({
