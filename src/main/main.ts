@@ -136,13 +136,29 @@ class StickyNotesApp {
     app.on('before-quit', async (event) => {
       if (!this.isQuitting) {
         event.preventDefault();
+        console.log('[SAVE] App quit requested, ensuring all data is saved...');
+        
         try {
+          // 1. 自動保存中のタイマーをすべて強制フラッシュ
           await this.flushAllPendingData();
+          
+          // 2. データストアの保存を強制実行
           await this.dataStore.forceFlushAll();
           
-          // ホットキーをクリーンアップ
+          // 3. すべてのレンダラープロセスに緊急保存を指示
+          for (const [noteId, window] of this.windows) {
+            if (!window.isDestroyed()) {
+              window.webContents.send('emergency-save-request');
+            }
+          }
+          
+          // 4. 少し待機してレンダラープロセスの保存完了を待つ
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // 5. ホットキーをクリーンアップ
           this.unregisterAllHotkeys();
           
+          console.log('[SAVE] All data saved successfully, proceeding with quit');
           this.isQuitting = true;
           this.hideAllWindows();
           
@@ -151,7 +167,9 @@ class StickyNotesApp {
             app.quit();
           }, 100);
         } catch (error) {
-          console.error('Error saving data before quit:', error);
+          console.error('[SAVE] Error saving data before quit:', error);
+          // エラー時でも強制終了するかユーザーに確認
+          console.warn('[SAVE] Forcing quit despite save errors');
           this.isQuitting = true;
           app.quit();
         }
@@ -200,7 +218,9 @@ class StickyNotesApp {
     win.setMenu(null);
     
     if (process.env.NODE_ENV === 'development') {
-      win.loadURL(`http://localhost:3000?noteId=${note.id}`);
+      win.loadFile(path.join(__dirname, 'index.html'), { 
+        query: { noteId: note.id }
+      });
     } else {
       win.loadFile(path.join(__dirname, 'index.html'), { query: { noteId: note.id } });
     }
@@ -2520,7 +2540,9 @@ class StickyNotesApp {
 
     // 検索ウィンドウの内容を読み込み
     if (process.env.NODE_ENV === 'development') {
-      this.searchWindow.loadURL('http://localhost:3000?search=true');
+      this.searchWindow.loadFile(path.join(__dirname, 'index.html'), {
+        query: { search: 'true' }
+      });
     } else {
       this.searchWindow.loadFile(path.join(__dirname, 'index.html'), { query: { search: 'true' } });
     }
@@ -2671,7 +2693,9 @@ class StickyNotesApp {
 
     // 設定ウィンドウの内容を読み込み
     if (process.env.NODE_ENV === 'development') {
-      this.settingsWindow.loadURL('http://localhost:3000?settings=true');
+      this.settingsWindow.loadFile(path.join(__dirname, 'index.html'), {
+        query: { settings: 'true' }
+      });
     } else {
       this.settingsWindow.loadFile(path.join(__dirname, 'index.html'), { query: { settings: 'true' } });
     }

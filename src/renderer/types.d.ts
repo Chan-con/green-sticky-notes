@@ -12,6 +12,7 @@ declare global {
       onSetActive: (callback: (isActive: boolean) => void) => void;
       onSettingsChanged: (callback: () => void) => void;
       onSettingsPreview: (callback: (settings: any) => void) => void;
+      onEmergencySaveRequest: (callback: () => void) => void;
       sendSettingsPreview: (settings: any) => Promise<void>;
       createNote: (nearNoteId?: string) => Promise<StickyNote>;
       updateNote: (noteId: string, updates: Partial<StickyNote>) => Promise<boolean>;

@@ -17,6 +17,7 @@ export const StickyNoteApp: React.FC = memo(() => {
   const lastEscPressRef = useRef<number>(0);
   const autoSaveIntervalRef = useRef<NodeJS.Timeout>();
   const lastSaveRef = useRef<number>(0);
+  const isSavingRef = useRef<boolean>(false); // 保存中状態を追跡
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -34,6 +35,10 @@ export const StickyNoteApp: React.FC = memo(() => {
     const loadSettings = async () => {
       try {
         const savedSettings = await window.electronAPI.getSettings();
+        if (process.env.NODE_ENV === 'development') {
+          console.log('設定読み込み完了:', savedSettings);
+          console.log('非アクティブフォントサイズ設定:', savedSettings?.defaultInactiveFontSize);
+        }
         setSettings(savedSettings);
       } catch (error) {
         console.error('設定の読み込みに失敗しました:', error);
@@ -76,6 +81,20 @@ export const StickyNoteApp: React.FC = memo(() => {
         }
       }
     });
+
+    // アプリ終了時の緊急保存要求をリッスン
+    const handleEmergencySaveRequest = async () => {
+      console.log('[SAVE] Emergency save requested by main process');
+      try {
+        await emergencySave();
+        console.log('[SAVE] Emergency save completed successfully');
+      } catch (error) {
+        console.error('[SAVE] Emergency save failed:', error);
+      }
+    };
+
+    // IPC イベントリスナーの設定
+    window.electronAPI.onEmergencySaveRequest(handleEmergencySaveRequest);
 
     // set-active イベントもリッスンして、より確実に状態を更新
     window.electronAPI.onSetActive((activeState) => {
@@ -198,46 +217,68 @@ export const StickyNoteApp: React.FC = memo(() => {
     // キーボードイベントリスナーを追加
     document.addEventListener('keydown', handleKeyDown);
     
-    // 定期的な自動保存（3秒間隔、保存条件を緩和）
+    // 定期的な自動保存（15秒間隔、保存状態追跡付き）
     const startAutoSave = () => {
       if (autoSaveIntervalRef.current) {
         clearInterval(autoSaveIntervalRef.current);
       }
       autoSaveIntervalRef.current = setInterval(async () => {
-        if (note && Date.now() - lastSaveRef.current > 10000) { // 10秒以上経過した場合のみ
+        if (note && Date.now() - lastSaveRef.current > 10000 && !isSavingRef.current) { // 10秒以上経過かつ保存中でない場合のみ
           try {
+            isSavingRef.current = true;
+            console.log('[SAVE] Auto-save starting...');
             await window.electronAPI.updateNote(note.id, { content: note.content });
             lastSaveRef.current = Date.now();
+            console.log('[SAVE] Auto-save completed successfully');
           } catch (error) {
-            console.error('Auto-save failed:', error);
+            console.error('[SAVE] Auto-save failed:', error);
+          } finally {
+            isSavingRef.current = false;
           }
         }
-      }, 15000); // 15秒間隔に変更
+      }, 15000); // 15秒間隔
     };
 
-    // 緊急保存ハンドラー
+    // 緊急保存ハンドラー（保存状態追跡付き）
     const emergencySave = async () => {
       if (note) {
+        // 既に保存中の場合は少し待つ
+        if (isSavingRef.current) {
+          console.log('[SAVE] Waiting for ongoing save to complete...');
+          let attempts = 0;
+          while (isSavingRef.current && attempts < 20) { // 最大2秒待機
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+          }
+        }
+
         // タイマーの有無に関係なく最新の状態を保存
         if (saveTimeoutRef.current) {
           clearTimeout(saveTimeoutRef.current);
         }
+        
         try {
+          isSavingRef.current = true;
+          console.log('[SAVE] Emergency save starting...');
           await window.electronAPI.updateNote(note.id, { content: note.content });
           lastSaveRef.current = Date.now();
+          console.log('[SAVE] Emergency save completed successfully');
         } catch (error) {
-          console.error('Emergency save failed:', error);
+          console.error('[SAVE] Emergency save failed:', error);
           // 緊急時は複数回試行
           for (let i = 0; i < 3; i++) {
             try {
               await new Promise(resolve => setTimeout(resolve, 100 * (i + 1)));
               await window.electronAPI.updateNote(note.id, { content: note.content });
-              console.log(`Emergency save succeeded on attempt ${i + 2}`);
+              console.log(`[SAVE] Emergency save succeeded on attempt ${i + 2}`);
+              lastSaveRef.current = Date.now();
               break;
             } catch (retryError) {
-              console.error(`Emergency save attempt ${i + 2} failed:`, retryError);
+              console.error(`[SAVE] Emergency save attempt ${i + 2} failed:`, retryError);
             }
           }
+        } finally {
+          isSavingRef.current = false;
         }
       }
     };
@@ -249,9 +290,18 @@ export const StickyNoteApp: React.FC = memo(() => {
       }
     };
 
-    // ページアンロード前に保存
-    const handleBeforeUnload = () => {
-      emergencySave();
+    // ページアンロード前に保存（同期的に待機）
+    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      try {
+        await emergencySave();
+        console.log('Emergency save completed before unload');
+      } catch (error) {
+        console.error('Emergency save failed before unload:', error);
+        // 保存失敗でもユーザーに確認を求める
+        e.returnValue = '未保存の変更があります。本当にページを離れますか？';
+        return '未保存の変更があります。本当にページを離れますか？';
+      }
     };
 
     // ウィンドウフォーカス喪失時に保存
@@ -595,7 +645,13 @@ export const StickyNoteApp: React.FC = memo(() => {
         ref={contentRef}
         onContentChange={updateNoteContent}
         onBlur={handleBlur}
-        inactiveFontSize={note?.fontSize ?? (settings?.defaultInactiveFontSize ?? 12)}
+        inactiveFontSize={(() => {
+          const fontSize = settings?.defaultInactiveFontSize ?? 12;
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[DEBUG] Inactive font size:', fontSize, 'Settings:', settings?.defaultInactiveFontSize);
+          }
+          return fontSize;
+        })()}
       />
     </div>
   );

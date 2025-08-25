@@ -71,6 +71,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('settings-preview', (_, settings) => callback(settings));
   },
   
+  onEmergencySaveRequest: (callback: () => void) => {
+    ipcRenderer.on('emergency-save-request', () => callback());
+  },
+  
   sendSettingsPreview: (settings: any) => safeIpcInvoke('send-settings-preview', settings),
   
   
