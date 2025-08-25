@@ -276,7 +276,7 @@ export const SettingsApp: React.FC = () => {
     sendPreview(newSettings);
   };
 
-  // 非アクティブサイズ変更時のハンドラ
+  // 表示モードサイズ変更時のハンドラ
   const handleInactiveSizeChange = (dimension: 'width' | 'height', value: number) => {
     console.log('[DEBUG] handleInactiveSizeChange called:', dimension, value);
     const newSettings = { 
@@ -288,7 +288,7 @@ export const SettingsApp: React.FC = () => {
     sendPreview(newSettings);
   };
 
-  // 非アクティブフォントサイズ変更時のハンドラ
+  // 表示モードフォントサイズ変更時のハンドラ
   const handleInactiveFontSizeChange = (value: number) => {
     const newSettings = { ...settings, defaultInactiveFontSize: value };
     setSettings(newSettings);
@@ -393,8 +393,8 @@ export const SettingsApp: React.FC = () => {
         { key: 'showAllHotkey', label: 'すべてのノートを表示', value: settings.showAllHotkey?.trim() },
         { key: 'hideAllHotkey', label: 'すべてのノートを隠す', value: settings.hideAllHotkey?.trim() },
         { key: 'searchHotkey', label: '検索ウィンドウの表示/非表示', value: settings.searchHotkey?.trim() },
-        { key: 'pinHotkey', label: 'アクティブ付箋のピン留め切り替え', value: settings.pinHotkey?.trim() },
-        { key: 'lockHotkey', label: 'アクティブ付箋のロック切り替え', value: settings.lockHotkey?.trim() },
+        { key: 'pinHotkey', label: '編集モード付箋のピン留め切り替え', value: settings.pinHotkey?.trim() },
+        { key: 'lockHotkey', label: '編集モード付箋のロック切り替え', value: settings.lockHotkey?.trim() },
         { key: 'newNoteHotkey', label: '新規ノート作成', value: settings.newNoteHotkey?.trim() }
       ].filter(hotkey => hotkey.value && hotkey.value.length > 0);
       
@@ -606,7 +606,7 @@ export const SettingsApp: React.FC = () => {
           <h3>ショートカットキー設定</h3>
           
           <div className="hotkey-setting">
-            <label>アクティブ付箋のピン留め切り替え:</label>
+            <label>編集モード付箋のピン留め切り替え:</label>
             <div className="hotkey-input-group">
               <input
                 type="text"
@@ -629,7 +629,7 @@ export const SettingsApp: React.FC = () => {
           </div>
           
           <div className="hotkey-setting">
-            <label>アクティブ付箋のロック切り替え:</label>
+            <label>編集モード付箋のロック切り替え:</label>
             <div className="hotkey-input-group">
               <input
                 type="text"
@@ -657,7 +657,7 @@ export const SettingsApp: React.FC = () => {
           <h3>サイズ設定</h3>
           
           <div className="setting-row">
-            <label htmlFor="defaultInactiveWidth">非アクティブモードの幅:</label>
+            <label htmlFor="defaultInactiveWidth">表示モードの幅:</label>
             <div className="size-input-group">
               <input
                 type="range"
@@ -681,7 +681,7 @@ export const SettingsApp: React.FC = () => {
           </div>
           
           <div className="setting-row">
-            <label htmlFor="defaultInactiveHeight">非アクティブモードの高さ:</label>
+            <label htmlFor="defaultInactiveHeight">表示モードの高さ:</label>
             <div className="size-input-group">
               <input
                 type="range"
@@ -705,7 +705,7 @@ export const SettingsApp: React.FC = () => {
           </div>
           
           <div className="setting-row">
-            <label htmlFor="defaultInactiveFontSize">非アクティブモードのフォントサイズ:</label>
+            <label htmlFor="defaultInactiveFontSize">表示モードのフォントサイズ:</label>
             <div className="size-input-group">
               <input
                 type="range"

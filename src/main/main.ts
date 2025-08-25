@@ -1139,7 +1139,7 @@ class StickyNotesApp {
       
       const menuTemplate: Electron.MenuItemConstructorOptions[] = [
         {
-          label: 'アクティブ時の座標・サイズを初期化',
+          label: '編集モード時の座標・サイズを初期化',
           click: async () => {
             console.log(`[DEBUG] Context menu item clicked for note: ${noteId}`);
             try {
@@ -1845,13 +1845,6 @@ class StickyNotesApp {
         click: async () => {
           console.log('[TRAY] Exit menu clicked');
           await this.quitApp();
-        }
-      },
-      {
-        label: '強制終了 (デバッグ)',
-        click: () => {
-          console.log('[TRAY] Force quit clicked');
-          process.exit(0);
         }
       }
     ]);
