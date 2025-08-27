@@ -27,6 +27,7 @@ declare global {
       selectFolderAndExportNotes: () => Promise<{success: boolean; path?: string; error?: string}>;
       openUrlInBrowser: (url: string) => Promise<boolean>;
       arrangeAllNotes: () => Promise<{success: boolean; movedCount?: number; error?: string}>;
+      reloadNote: (noteId: string) => Promise<{success: boolean; error?: string}>;
       
       // 検索関連のメソッド
       searchNotes: (query: SearchQuery) => Promise<SearchResult[]>;

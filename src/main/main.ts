@@ -1816,6 +1816,35 @@ class StickyNotesApp {
       }
     });
 
+    // ノート再読み込み用IPCハンドラー
+    ipcMain.handle('reload-note', async (event, noteId: string) => {
+      try {
+        console.log(`[DEBUG] reload-note IPC handler called for note: ${noteId}`);
+        
+        const window = this.windows.get(noteId);
+        if (!window || window.isDestroyed()) {
+          console.log(`[DEBUG] Window not found for note ${noteId}, cannot reload`);
+          return { success: false, error: 'ウィンドウが見つかりません' };
+        }
+
+        // ノートデータを再取得して送信
+        const note = await this.dataStore.getNote(noteId);
+        if (!note) {
+          console.log(`[DEBUG] Note data not found for note ${noteId}`);
+          return { success: false, error: 'ノートデータが見つかりません' };
+        }
+
+        // ウィンドウに更新されたノートデータを送信
+        safeSend(window.webContents, 'note-data', note);
+        console.log(`[DEBUG] Note data resent for note: ${noteId}`);
+        
+        return { success: true };
+      } catch (error) {
+        console.error('[ERROR] Failed to reload note:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
   }
 
   private createTray() {

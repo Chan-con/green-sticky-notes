@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolderAndExportNotes: () => safeIpcInvoke('select-folder-and-export-notes'),
   openUrlInBrowser: (url: string) => safeIpcInvoke('open-url-in-browser', url),
   arrangeAllNotes: () => safeIpcInvoke('arrange-all-notes'),
+  reloadNote: (noteId: string) => safeIpcInvoke('reload-note', noteId),
   
   // 検索関連のメソッド
   searchNotes: (query: SearchQuery) => safeIpcInvoke('search-notes', query),

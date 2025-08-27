@@ -19,6 +19,36 @@ export const StickyNoteApp: React.FC = memo(() => {
   const lastSaveRef = useRef<number>(0);
   const isSavingRef = useRef<boolean>(false); // 保存中状態を追跡
 
+  // 再読み込み機能
+  const handleReload = useCallback(async () => {
+    console.log('[DEBUG] Manual reload requested');
+    setLoadingError(null);
+    setIsLoading(true);
+    
+    try {
+      // URLからnoteIdを取得
+      const urlParams = new URLSearchParams(window.location.search);
+      const noteId = urlParams.get('noteId');
+      
+      if (noteId) {
+        // メインプロセス経由でノートデータを再取得
+        const result = await window.electronAPI.reloadNote(noteId);
+        if (!result.success) {
+          setLoadingError(result.error || 'ノートの再読み込みに失敗しました');
+          setIsLoading(false);
+        }
+        // 成功時はonNoteDataコールバックで自動的に状態が更新される
+      } else {
+        // noteIdがない場合は単純にページをリロード
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('[ERROR] Reload failed:', error);
+      setLoadingError('再読み込み中にエラーが発生しました');
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const noteId = urlParams.get('noteId');
@@ -801,18 +831,59 @@ export const StickyNoteApp: React.FC = memo(() => {
 
   if (loadingError) {
     return (
-      <div style={{ 
-        padding: '20px', 
-        backgroundColor: '#ffebee', 
-        border: '1px solid #f44336',
-        borderRadius: '4px',
-        fontSize: '12px',
-        color: '#d32f2f',
-        maxWidth: '250px',
-        wordBreak: 'break-word'
-      }}>
-        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>読み込みエラー</div>
-        <div>{loadingError}</div>
+      <div 
+        onClick={handleReload}
+        style={{ 
+          padding: '20px', 
+          backgroundColor: '#ffebee', 
+          border: '1px solid #f44336',
+          borderRadius: '4px',
+          fontSize: '12px',
+          color: '#d32f2f',
+          maxWidth: '250px',
+          wordBreak: 'break-word',
+          cursor: 'pointer',
+          userSelect: 'none',
+          transition: 'all 0.2s ease',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#ffcdd2';
+          e.currentTarget.style.transform = 'translateY(-1px)';
+          e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#ffebee';
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        }}
+        title="クリックして再読み込み"
+      >
+        <div style={{ 
+          fontWeight: 'bold', 
+          marginBottom: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          ⚠️ 読み込みエラー
+        </div>
+        <div style={{ marginBottom: '12px', lineHeight: '1.4' }}>{loadingError}</div>
+        <div style={{ 
+          fontSize: '11px', 
+          opacity: 0.9, 
+          fontWeight: 'bold',
+          textAlign: 'center',
+          marginTop: '8px',
+          borderTop: '1px solid rgba(244, 67, 54, 0.3)',
+          paddingTop: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '4px'
+        }}>
+          � クリックして再読み込み
+        </div>
       </div>
     );
   }
@@ -825,9 +896,29 @@ export const StickyNoteApp: React.FC = memo(() => {
         borderRadius: '4px',
         fontSize: '12px',
         color: '#666',
-        textAlign: 'center'
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px'
       }}>
-        Loading...
+        <div style={{
+          width: '20px',
+          height: '20px',
+          border: '2px solid #ddd',
+          borderTop: '2px solid #666',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <div>読み込み中...</div>
+        <style>
+          {`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}
+        </style>
       </div>
     );
   }
