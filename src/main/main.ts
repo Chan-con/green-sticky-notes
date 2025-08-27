@@ -66,6 +66,43 @@ function safeSend(webContents: Electron.WebContents, channel: string, ...args: a
   }
 }
 
+/**
+ * アプリケーション定数
+ */
+const APP_CONSTANTS = {
+  // ウィンドウサイズ
+  DEFAULT_EDIT_WIDTH: 300,
+  DEFAULT_EDIT_HEIGHT: 200,
+  DEFAULT_INACTIVE_WIDTH: 150,
+  DEFAULT_INACTIVE_HEIGHT: 100,
+  MIN_WINDOW_WIDTH: 150,
+  MIN_WINDOW_HEIGHT: 100,
+  
+  // 配置とマージン
+  NOTE_OFFSET: 20,
+  DISPLAY_MARGIN: 50,
+  GRID_PADDING: 20,
+  SAFE_MARGIN: 50,
+  VIRTUAL_MARGIN: 100,
+  
+  // タイミング
+  MOVE_DEBOUNCE_MS: 100,
+  RESIZE_DEBOUNCE_MS: 200,
+  BLUR_TIMEOUT_MS: 80,
+  FOCUS_DELAY_MS: 120,
+  SHUTDOWN_WAIT_MS: 300,
+  QUIT_TIMEOUT_MS: 100,
+  
+  // デフォルトサイズ
+  SETTINGS_WINDOW: { width: 450, height: 300 },
+  SEARCH_WINDOW: { width: 600, height: 500 },
+  CONSOLE_WINDOW: { width: 800, height: 600 },
+  
+  // ファイルサイズ制限
+  MAX_FILENAME_LENGTH: 50,
+  MAX_CONTENT_PREVIEW: 100
+} as const;
+
 class StickyNotesApp {
   private windows: Map<string, BrowserWindow> = new Map();
   private dataStore: DataStore;
@@ -164,8 +201,8 @@ class StickyNotesApp {
       bounds = {
         x: note.inactiveX || 100,  // 新規ノートは非アクティブ座標を初期位置として使用
         y: note.inactiveY || 100,  // 新規ノートは非アクティブ座標を初期位置として使用
-        width: 300,  // 編集モード固定サイズ
-        height: 200, // 編集モード固定サイズ
+        width: APP_CONSTANTS.DEFAULT_EDIT_WIDTH,  // 編集モード固定サイズ
+        height: APP_CONSTANTS.DEFAULT_EDIT_HEIGHT, // 編集モード固定サイズ
         displayId: note.displayId,
         shouldMigrate: false,
         displayChanged: false
@@ -185,8 +222,8 @@ class StickyNotesApp {
       alwaysOnTop: note.isPinned,
       skipTaskbar: true,
       resizable: note.isActive, // 非アクティブ時はリサイズ無効
-      minWidth: 150,
-      minHeight: 100,
+      minWidth: APP_CONSTANTS.MIN_WINDOW_WIDTH,
+      minHeight: APP_CONSTANTS.MIN_WINDOW_HEIGHT,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -336,7 +373,7 @@ class StickyNotesApp {
         
         // タイマーをクリア
         delete timers.moveTimeout;
-      }, 100); // 100msのデバウンス
+      }, APP_CONSTANTS.MOVE_DEBOUNCE_MS); // 100msのデバウンス
     });
 
     win.on('resized', async () => {
@@ -368,7 +405,7 @@ class StickyNotesApp {
         
         // タイマーをクリア
         delete timers.resizeTimeout;
-      }, 200); // 200msのデバウンス
+      }, APP_CONSTANTS.RESIZE_DEBOUNCE_MS); // 200msのデバウンス
     });
 
     // フォーカス損失時の非アクティブ化処理
@@ -421,7 +458,7 @@ class StickyNotesApp {
           } else {
             console.log(`[DEBUG] Note ${note.id} focus moved to related window, keeping active`);
           }
-        }, 80); // 80ms待機に短縮
+        }, APP_CONSTANTS.BLUR_TIMEOUT_MS); // 80ms待機に短縮
       }
     });
 
@@ -504,6 +541,47 @@ class StickyNotesApp {
   }
 
   /**
+   * ウィンドウ位置が有効な範囲内にあるかチェックして、必要に応じて調整
+   */
+  private adjustPositionToBounds(x: number, y: number, width: number, height: number, display: Electron.Display): { x: number, y: number } {
+    const bounds = display.bounds;
+    const safeMargin = APP_CONSTANTS.SAFE_MARGIN;
+    
+    // 最小限の境界チェック
+    let adjustedX = x;
+    let adjustedY = y;
+    
+    // 完全に画面外の場合のみ調整
+    const isCompletelyOutside = 
+      x + width < bounds.x || x > bounds.x + bounds.width ||
+      y + height < bounds.y || y > bounds.y + bounds.height;
+      
+    if (isCompletelyOutside) {
+      adjustedX = bounds.x + safeMargin;
+      adjustedY = bounds.y + safeMargin;
+    }
+    
+    return { x: adjustedX, y: adjustedY };
+  }
+
+  /**
+   * デフォルトのウィンドウサイズを取得
+   */
+  private getDefaultWindowSize(isActive: boolean): { width: number, height: number } {
+    if (isActive) {
+      return {
+        width: APP_CONSTANTS.DEFAULT_EDIT_WIDTH,
+        height: APP_CONSTANTS.DEFAULT_EDIT_HEIGHT
+      };
+    } else {
+      return {
+        width: APP_CONSTANTS.DEFAULT_INACTIVE_WIDTH,
+        height: APP_CONSTANTS.DEFAULT_INACTIVE_HEIGHT
+      };
+    }
+  }
+
+  /**
    * ユーザーが設定した位置を正確に復元する
    */
   private async calculateNoteBounds(note: StickyNote, currentWindowX?: number, currentWindowY?: number) {
@@ -514,8 +592,9 @@ class StickyNotesApp {
     if (note.isNewlyCreated && note.isActive) {
       x = note.activeX || note.inactiveX || 100;
       y = note.activeY || note.inactiveY || 100;
-      width = 300; // 編集モード固定サイズ
-      height = 200; // 編集モード固定サイズ
+      const editSize = this.getDefaultWindowSize(true);
+      width = editSize.width; // 編集モード固定サイズ
+      height = editSize.height; // 編集モード固定サイズ
       console.log(`[DEBUG] calculateNoteBounds - using edit mode size for new note: ${width}x${height}`);
     } else if (note.isActive) {
       // 既存ノートのアクティブ状態
@@ -549,8 +628,9 @@ class StickyNotesApp {
           }
         }
       }
-      width = note.activeWidth || 300;
-      height = note.activeHeight || 200;
+      const defaultSize = this.getDefaultWindowSize(true);
+      width = note.activeWidth || defaultSize.width;
+      height = note.activeHeight || defaultSize.height;
     } else {
       // 非アクティブ状態の位置とサイズ
       x = note.inactiveX || 100;
@@ -563,19 +643,20 @@ class StickyNotesApp {
         height = note.inactiveHeight;
         console.log('[DEBUG] calculateNoteBounds - using saved inactive size:', width, 'x', height, 'for note:', note.id);
       } else {
-        // サイズが保存されていない場合は設定から取得
-        const settings = await this.dataStore.getSettings();
-        width = settings.defaultInactiveWidth || 150;
-        height = settings.defaultInactiveHeight || 100;
+        // サイズが保存されていない場合はデフォルトサイズを取得
+        const defaultSize = this.getDefaultWindowSize(false);
+        width = defaultSize.width;
+        height = defaultSize.height;
         console.log('[DEBUG] calculateNoteBounds - using default inactive size:', width, 'x', height, 'for note:', note.id);
       }
     }
 
     // 数値型を確実にする
+    const fallbackSize = this.getDefaultWindowSize(note.isActive);
     x = Number(x) || 100;
     y = Number(y) || 100;
-    width = Number(width) || (note.isActive ? 300 : 150);
-    height = Number(height) || (note.isActive ? 200 : 100);
+    width = Number(width) || fallbackSize.width;
+    height = Number(height) || fallbackSize.height;
 
     // 実際の位置からディスプレイを検出（より正確な方法）
     const actualDisplay = this.findDisplayContainingPoint(x, y);
@@ -1395,7 +1476,7 @@ class StickyNotesApp {
             window.focus();
             console.log(`[DEBUG] Note ${noteId} focused after search selection`);
           }
-        }, 120); // 120msに延長してブラーイベントを回避
+        }, APP_CONSTANTS.FOCUS_DELAY_MS); // 120msに延長してブラーイベントを回避
         
         // 7. ウィンドウに更新された状態を通知
         const updatedNote = await this.dataStore.getNote(noteId);
@@ -2586,8 +2667,8 @@ class StickyNotesApp {
     }
 
     this.searchWindow = new BrowserWindow({
-      width: 600,
-      height: 500,
+      width: APP_CONSTANTS.SEARCH_WINDOW.width,
+      height: APP_CONSTANTS.SEARCH_WINDOW.height,
       resizable: false,
       frame: false,
       alwaysOnTop: true,
@@ -2736,8 +2817,8 @@ class StickyNotesApp {
     }
 
     this.settingsWindow = new BrowserWindow({
-      width: 450,
-      height: 300,
+      width: APP_CONSTANTS.SETTINGS_WINDOW.width,
+      height: APP_CONSTANTS.SETTINGS_WINDOW.height,
       resizable: false,
       frame: false,
       webPreferences: {
