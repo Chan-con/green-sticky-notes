@@ -1002,8 +1002,21 @@ class StickyNotesApp {
         // アクティブ状態に応じてリサイズ可能性を設定
         win.setResizable(isActive);
         
+        // ピン留め状態を考慮してalwaysOnTopを設定
         if (isActive) {
+          // アクティブ時は常にalwaysOnTop
+          win.setAlwaysOnTop(true, 'screen-saver', 1);
           win.focus();
+        } else {
+          // 非アクティブ時はピン留め状態に応じて設定
+          const currentNote = await this.dataStore.getNote(noteId);
+          if (currentNote) {
+            win.setAlwaysOnTop(currentNote.isPinned);
+            console.log(`[DEBUG] set-note-active: setAlwaysOnTop(${currentNote.isPinned}) for note ${noteId} (pinned: ${currentNote.isPinned})`);
+          } else {
+            win.setAlwaysOnTop(false);
+            console.log(`[DEBUG] set-note-active: setAlwaysOnTop(false) for note ${noteId} (no data found)`);
+          }
         }
         
         // 状態変更完了を通知
