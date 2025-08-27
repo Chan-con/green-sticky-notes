@@ -1084,20 +1084,21 @@ class StickyNotesApp {
         win.setResizable(isActive);
         
         // ピン留め状態を考慮してalwaysOnTopを設定
-        if (isActive) {
-          // アクティブ時は常にalwaysOnTop
-          win.setAlwaysOnTop(true, 'screen-saver', 1);
-          win.focus();
-        } else {
-          // 非アクティブ時はピン留め状態に応じて設定
-          const currentNote = await this.dataStore.getNote(noteId);
-          if (currentNote) {
+        const currentNote = await this.dataStore.getNote(noteId);
+        if (currentNote) {
+          if (isActive) {
+            // アクティブ時: ピン留め状態に応じて最前面設定、常にフォーカス
             win.setAlwaysOnTop(currentNote.isPinned);
-            console.log(`[DEBUG] set-note-active: setAlwaysOnTop(${currentNote.isPinned}) for note ${noteId} (pinned: ${currentNote.isPinned})`);
+            win.focus();
+            console.log(`[DEBUG] set-note-active: Active mode - setAlwaysOnTop(${currentNote.isPinned}) for note ${noteId} (pinned: ${currentNote.isPinned})`);
           } else {
-            win.setAlwaysOnTop(false);
-            console.log(`[DEBUG] set-note-active: setAlwaysOnTop(false) for note ${noteId} (no data found)`);
+            // 非アクティブ時はピン留め状態に応じて設定
+            win.setAlwaysOnTop(currentNote.isPinned);
+            console.log(`[DEBUG] set-note-active: Inactive mode - setAlwaysOnTop(${currentNote.isPinned}) for note ${noteId} (pinned: ${currentNote.isPinned})`);
           }
+        } else {
+          win.setAlwaysOnTop(false);
+          console.log(`[DEBUG] set-note-active: setAlwaysOnTop(false) for note ${noteId} (no data found)`);
         }
         
         // 状態変更完了を通知
@@ -1460,7 +1461,12 @@ class StickyNotesApp {
         // 6. ウィンドウを表示・フォーカス・リサイズ可能にする
         window.show();
         window.setResizable(true);
-        window.setAlwaysOnTop(true, 'screen-saver', 1);
+        
+        // ピン留め状態に応じて最前面設定
+        const noteForAlwaysOnTop = await this.dataStore.getNote(noteId);
+        const shouldBeAlwaysOnTop = noteForAlwaysOnTop ? noteForAlwaysOnTop.isPinned : false;
+        window.setAlwaysOnTop(shouldBeAlwaysOnTop);
+        console.log(`[DEBUG] open-note-by-id: setAlwaysOnTop(${shouldBeAlwaysOnTop}) for note ${noteId} (pinned: ${shouldBeAlwaysOnTop})`);
         
         // 検索ウィンドウを閉じてからフォーカスを設定
         if (this.searchWindow && !this.searchWindow.isDestroyed()) {
@@ -2561,8 +2567,10 @@ class StickyNotesApp {
       });
 
       // 4. ウィンドウの表示状態を更新
-      console.log(`[DEBUG] handleSetNoteActive: setting window ${noteId} to be always on top and focused`);
-      win.setAlwaysOnTop(true, 'screen-saver', 1);
+      const updatedNoteForAlwaysOnTop = await this.dataStore.getNote(noteId);
+      const shouldBeAlwaysOnTop = updatedNoteForAlwaysOnTop ? updatedNoteForAlwaysOnTop.isPinned : false;
+      console.log(`[DEBUG] handleSetNoteActive: setting window ${noteId} - alwaysOnTop: ${shouldBeAlwaysOnTop} (pinned: ${shouldBeAlwaysOnTop}), focusing`);
+      win.setAlwaysOnTop(shouldBeAlwaysOnTop);
       win.focus();
       safeSend(win.webContents, 'set-active', true);
       
@@ -2619,12 +2627,13 @@ class StickyNotesApp {
       }
 
       // 4. ウィンドウの表示状態を更新
-      console.log(`[DEBUG] handleSetNoteActive: setting window ${noteId} to not always on top and sending inactive state`);
-      win.setAlwaysOnTop(false);
+      const finalNote = await this.dataStore.getNote(noteId);
+      const shouldBeAlwaysOnTop = finalNote ? finalNote.isPinned : false;
+      console.log(`[DEBUG] handleSetNoteActive: setting window ${noteId} - alwaysOnTop: ${shouldBeAlwaysOnTop} (pinned: ${shouldBeAlwaysOnTop}) and sending inactive state`);
+      win.setAlwaysOnTop(shouldBeAlwaysOnTop);
       safeSend(win.webContents, 'set-active', false);
       
       // 更新されたノートデータをレンダラーに送信
-      const finalNote = await this.dataStore.getNote(noteId);
       if (finalNote) {
         safeSend(win.webContents, 'note-data', finalNote);
       }
