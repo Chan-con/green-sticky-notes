@@ -50,7 +50,8 @@ async function safeIpcInvoke(channel: string, ...args: any[]): Promise<any> {
     return await ipcRenderer.invoke(channel, ...sanitizedArgs);
   } catch (error) {
     console.error(`[IPC-Preload] Failed to invoke ${channel}:`, error);
-    throw error;
+    // ユーザーフレンドリーなエラーメッセージに変換
+    throw new Error('処理を実行できませんでした');
   }
 }
 

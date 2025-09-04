@@ -34,7 +34,7 @@ export const StickyNoteApp: React.FC = memo(() => {
         // メインプロセス経由でノートデータを再取得
         const result = await window.electronAPI.reloadNote(noteId);
         if (!result.success) {
-          setLoadingError(result.error || 'ノートの再読み込みに失敗しました');
+          setLoadingError('再読み込みできませんでした');
           setIsLoading(false);
         }
         // 成功時はonNoteDataコールバックで自動的に状態が更新される
@@ -44,7 +44,7 @@ export const StickyNoteApp: React.FC = memo(() => {
       }
     } catch (error) {
       console.error('[ERROR] Reload failed:', error);
-      setLoadingError('再読み込み中にエラーが発生しました');
+      setLoadingError('再読み込みできませんでした');
       setIsLoading(false);
     }
   }, []);
@@ -56,7 +56,7 @@ export const StickyNoteApp: React.FC = memo(() => {
     // タイムアウト設定（5秒でエラー表示）
     const loadingTimeout = setTimeout(() => {
       if (!note) {
-        setLoadingError('ノートの読み込みに時間がかかっています。ウィンドウを閉じて再度開いてください。');
+        setLoadingError('読み込みに時間がかかっています');
         setIsLoading(false);
       }
     }, 5000);
@@ -866,7 +866,7 @@ export const StickyNoteApp: React.FC = memo(() => {
           alignItems: 'center',
           gap: '6px'
         }}>
-          ⚠️ 読み込みエラー
+          📄 付箋を読み込めません
         </div>
         <div style={{ marginBottom: '12px', lineHeight: '1.4' }}>{loadingError}</div>
         <div style={{ 
